@@ -1,19 +1,50 @@
-import React, { useState } from 'react';
-import { View, Image, Text, TextInput ,TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import React, { useState, useCallback } from "react";
+import {
+  View,
+  Image,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Alert,
+} from "react-native";
 import styles from "../../assets/styles/login.styles";
 import { Ionicons } from "@expo/vector-icons";
-import COLORS from '../../constant/colors';
-import {Link} from 'expo-router'
+import COLORS from "../../constant/colors";
+import { Link } from "expo-router";
+import { useAuthStore } from "../../store/authStore";
+
+
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const { isLoading , login } = useAuthStore();
 
-  const handleLogin = () => {
-    console.log('Logging in with:', email, password);
-  };
+  
+  const handleLogin = useCallback(async () => {
+    if (!email || !password) {
+      Alert.alert("Error", "Please enter both email and password.");
+      return;
+    }
+
+    const result = await login(email, password);
+
+    if (!result.success) {
+      Alert.alert("Error", result.error);
+      return;
+    }
+
+    Alert.alert("Success", "Login successful!", [
+      {
+        text: "OK",
+        onPress: () => console.log("Navigate to Home or Dashboard"),
+      },
+    ]);
+  }, [email, password, login]);
 
   return (
     <KeyboardAvoidingView 
