@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useRouter } from 'expo-router';
 import {
   View,
   Text,
@@ -8,22 +9,36 @@ import {
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import styles from '../../assets/styles/signup.styles';
 import COLORS from '../../constant/colors';
+import { useAuthStore } from '../../store/authStore';
 
 export default function Signup() {
-  const [fullName, setFullName] = useState('');
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSignup = () => {
-    setIsLoading(true);
-    // Simulate signup logic
-    setTimeout(() => setIsLoading(false), 2000);
+  const { user, isLoading, register } = useAuthStore();
+  const router = useRouter(); // ✅ Ensure router is available
+
+  console.log('User state:', user);
+
+  const handleSignup = async () => {
+    const result = await register(username, email, password);
+    if (!result.success) {
+      Alert.alert("Error", result.error);
+    } else {
+      Alert.alert("Success", "Account created successfully!", [
+        {
+          text: "OK",
+          onPress: () => router.push('/login'), // ✅ Navigate after confirmation
+        },
+      ]);
+    }
   };
 
   return (
@@ -43,17 +58,17 @@ export default function Signup() {
 
         {/* Form */}
         <View style={styles.formContainer}>
-          {/* Fullname Input */}
+          {/* Username Input */}
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Fullname</Text>
+            <Text style={styles.label}>Username</Text>
             <View style={styles.inputContainer}>
               <Ionicons name="person-outline" size={20} color={COLORS.primary} style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="Enter your fullname"
+                placeholder="Enter your username"
                 placeholderTextColor={COLORS.placeholderText}
-                value={fullName}
-                onChangeText={setFullName}
+                value={username}
+                onChangeText={setUsername}
                 autoCapitalize="words"
               />
             </View>
@@ -101,8 +116,20 @@ export default function Signup() {
 
           {/* Signup Button */}
           <TouchableOpacity style={styles.button} onPress={handleSignup} disabled={isLoading}>
-            {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Signup</Text>}
+            {isLoading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.buttonText}>Signup</Text>
+            )}
           </TouchableOpacity>
+
+          {/* Footer */}
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>Already have an account?</Text>
+            <TouchableOpacity onPress={() => router.back()}>
+              <Text style={styles.link}>Login</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     </KeyboardAvoidingView>
