@@ -33,7 +33,7 @@
   // Rentify Color Palette
   
   const COLORS = {
-    primary: "#ba68c8", 
+    primary: "rgba(36, 67, 217, 0.7)", 
     textPrimary: "#1a4971",
     textSecondary: "#6d93b8", 
     textDark: "#0d2b43", 
