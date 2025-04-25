@@ -1,15 +1,3 @@
-<<<<<<< HEAD
-import { View, Text } from 'react-native'
-import React from 'react'
-
-export default function Create() {
-  return (
-    <View>
-      <Text>Create Tab</Text>
-    </View>
-  )
-}
-=======
 import {
   View,
   Text,
@@ -39,7 +27,7 @@ export default function Create() {
   const [image, setImage] = React.useState(null);
   const [isLoading, setIsLoading] = React.useState(false);
 
-  const { token, userId } = useAuthStore(); // Add userId to destructuring
+  const { token, user } = useAuthStore(); // Ensure `user` is destructured to get `userId`
   const router = useRouter();
 
   const pickImage = async () => {
@@ -72,7 +60,7 @@ export default function Create() {
       return;
     }
 
-    if (!userId) {
+    if (!user?.id) {
       Alert.alert('Error', 'User not authenticated');
       return;
     }
@@ -86,30 +74,17 @@ export default function Create() {
       formData.append('address', address.trim());
       formData.append('description', description.trim());
       formData.append('price', parseFloat(price));
-      
-      // Send ownerId as a separate field to ensure proper handling
-      formData.append('ownerId', userId.toString());
+      formData.append('ownerId', user.id.toString());
 
       // Image handling
       const filename = image.split('/').pop();
       const match = /\.(\w+)$/.exec(filename);
       const type = match ? `image/${match[1]}` : 'image/jpeg';
-      
-      // Create blob-like object for the image
-      const imageFile = {
+
+      formData.append('images', {
         uri: Platform.OS === 'ios' ? image.replace('file://', '') : image,
         name: filename || 'photo.jpg',
-        type: type
-      };
-
-      formData.append('images', imageFile);
-
-      console.log('Form data:', {
-        name: title.trim(),
-        address: address.trim(),
-        description: description.trim(),
-        price: parseFloat(price),
-        ownerId: userId.toString()
+        type,
       });
 
       const response = await fetch(`${API_URL}/api/property`, {
@@ -121,10 +96,8 @@ export default function Create() {
         body: formData,
       });
 
-      // Log response for debugging
-      console.log('Response status:', response.status);
       const responseText = await response.text();
-      console.log('Response text:', responseText);
+      console.log('Response:', responseText);
 
       if (!response.ok) {
         throw new Error(`Server error: ${responseText}`);
@@ -137,7 +110,6 @@ export default function Create() {
       setPrice('');
       setImage(null);
       router.push('/(tabs)/home');
-
     } catch (error) {
       console.error('Submit Error:', error);
       Alert.alert('Error', 'Failed to create property. Please check your connection and try again.');
@@ -153,7 +125,7 @@ export default function Create() {
     >
       <ScrollView contentContainerStyle={styles.container} style={styles.scrollViewStyle}>
         <View style={styles.card}>
-          <Text style={styles.title}>Add property</Text>
+          <Text style={styles.title}>Add Property</Text>
           <Text style={styles.subtitle}>Add a new property to your list</Text>
 
           <View style={styles.formGroup}>
@@ -265,4 +237,3 @@ export default function Create() {
     </KeyboardAvoidingView>
   );
 }
->>>>>>> my-changes

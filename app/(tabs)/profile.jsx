@@ -1,15 +1,3 @@
-<<<<<<< HEAD
-import { View, Text } from 'react-native'
-import React from 'react'
-
-export default function Profile() {
-  return (
-    <View>
-      <Text>Profile Tabs</Text>
-    </View>
-  )
-}
-=======
 import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import React from 'react';
 import { useAuthStore } from '@/store/authStore';
@@ -88,4 +76,3 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
 });
->>>>>>> my-changes

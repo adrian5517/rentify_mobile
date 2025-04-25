@@ -1,46 +1,3 @@
-<<<<<<< HEAD
-import { Ionicons } from '@expo/vector-icons'
-import { Tabs } from 'expo-router'
-import React from 'react'
-import COLORS from '../../constant/colors'
-
-export default function TabLayout() {
-  return (
-    <Tabs 
-    screenOptions={{
-        headerShown:false,
-        tabBarActiveTintColor:COLORS.primary,
-    }}>
-        
-        <Tabs.Screen name='index' 
-        options={{
-            title:"Home",
-            tabBarIcon:({color,size}) => <Ionicons
-             name='home-outline'
-             size={size} color={color}
-            />
-        }}
-        />
-        <Tabs.Screen name='create'
-         options={{
-            title:"Create",
-            tabBarIcon:({color,size}) => <Ionicons
-             name='add-circle-outline'
-             size={size} color={color}
-            />
-        }}/>
-        <Tabs.Screen name='profile'
-         options={{
-            title:"Profile",
-            tabBarIcon:({color,size}) => <Ionicons
-             name='person-outline'
-             size={size} color={color}
-            />
-        }}/>
-
-    </Tabs>
-  )
-=======
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import React from 'react';
@@ -55,7 +12,7 @@ export default function TabLayout() {
         tabBarActiveTintColor: '#fff',
         tabBarInactiveTintColor: '#d0f0c0',
         tabBarStyle: {
-          backgroundColor: 'rgba(36, 67, 217, 0.7)',
+          backgroundColor: '#03045e',
           borderTopWidth: 0,
           height: 80,
           paddingTop:10,
@@ -84,24 +41,11 @@ export default function TabLayout() {
           ),
         }}
       />
-     
-      <Tabs.Screen
-        name="schedule"
-        options={{
-          title: 'Schedule',
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons
-              name={focused ? 'calendar' : 'calendar-outline'}
-              size={24}
-              color={color}
-            />
-          ),
-        }}
-      />
-       <Tabs.Screen
+
+<Tabs.Screen
         name="create"
         options={{
-          title: 'Route',
+          title: 'Nearby',
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? 'location' : 'location-outline'}
@@ -111,6 +55,21 @@ export default function TabLayout() {
           ),
         }}
       />
+     
+      <Tabs.Screen
+        name="schedule"
+        options={{
+          title: 'Create',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons
+              name={focused ? 'calendar' : 'calendar-outline'}
+              size={24}
+              color={color}
+            />
+          ),
+        }}
+      />
+      
       
       <Tabs.Screen
         name="message"
@@ -140,5 +99,4 @@ export default function TabLayout() {
       />
     </Tabs>
   );
->>>>>>> my-changes
 }

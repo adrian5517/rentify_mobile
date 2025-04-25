@@ -33,18 +33,19 @@
   // Rentify Color Palette
   
   const COLORS = {
-    primary: "rgba(36, 67, 217, 0.7)", 
-    textPrimary: "#1a4971",
-    textSecondary: "#6d93b8", 
-    textDark: "#0d2b43", 
-    placeholderText: "#767676",
-    background: "#e3f2fd", 
-    cardBackground: "#f5f9ff",
-    inputBackground: "#f0f8ff", 
-    border: "#eecbf4",
-    white: "#ffffff",
-    black: "#000000",
+    primary: "#03045E", // Deep Blue
+    textPrimary: "#0077B6", // Light Blue
+    textSecondary: "#00B4D8", // Cyan
+    textDark: "#90E0EF", // Light Cyan
+    placeholderText: "#CAF0FB", // Very Light Cyan
+    background: "#CAF0FB", // Very Light Cyan for background
+    cardBackground: "#90E0EF", // Light Cyan for card background
+    inputBackground: "#00B4D8", // Cyan for input background
+    border: "#0077B6", // Light Blue for borders
+    white: "#ffffff", // White
+    black: "#000000", // Black
   };
+  
   
   
   // BLOSSOM

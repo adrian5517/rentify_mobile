@@ -33,7 +33,7 @@ export default function AuthLayout() {
         <Stack  screenOptions={{headerShown: false}}>
          <Stack.Screen name="(tabs)" />
          <Stack.Screen name="(auth)" />
-         </Stack>;
+         </Stack>
         </SafeScreen>
         
         <StatusBar style='dark' />
