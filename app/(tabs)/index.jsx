@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import COLORS from '../../constant/colors';
 import Fuse from 'fuse.js';
+import KMeans from 'ml-kmeans';
 
 export default function Home() {
   const [username, setUsername] = useState('Guest');
@@ -125,6 +126,7 @@ export default function Home() {
         <TextInput
           style={styles.searchInput}
           placeholder="Search room..."
+          placeholderTextColor={COLORS.placeholderText}
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
@@ -163,7 +165,9 @@ export default function Home() {
                   <Image source={{ uri: property.image }} style={styles.propertyImage} />
                   <Text style={styles.propertyName}>{property.name}</Text>
                   <Text style={styles.propertyPrice}>₱{property.price}</Text>
+                  <Text style={styles.propertyLocation}>{property.location.address}</Text>
                   <Text style={styles.propertyDescription}>{property.description}</Text>
+                  
                   <TouchableOpacity style={styles.propertyButton} onPress={() => handlePropertyPress(property)}>
                     <Text style={styles.propertyButtonText}>View Details</Text>
                   </TouchableOpacity>
@@ -264,7 +268,7 @@ const styles = StyleSheet.create({
       borderRadius: 12,
     },
     propertyDetailsContainer: {
-      paddingTop: 10,
+      
       paddingLeft:5, // Adjusted top padding to create space between image and content
     },
     propertyName: {
@@ -284,12 +288,12 @@ const styles = StyleSheet.create({
     propertyDescription: {
       fontSize: 15,
       color: '#666',
-      marginBottom: 10, // Added space below description
+       // Added space below description
       height: 45, // Adjusted height to better fit longer descriptions
       overflow: 'hidden', // Ensures long text is clipped
     },
     propertyLocation: {
-      fontSize: 14,
+      fontSize: 15,
       color: '#444',
       fontStyle: 'italic',
       marginBottom: 10, // Space before the button
