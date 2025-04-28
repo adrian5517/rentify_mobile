@@ -4,7 +4,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import COLORS from '../../constant/colors';
 import Fuse from 'fuse.js';
-import KMeans from 'ml-kmeans';
+import MapView, { Marker } from 'react-native-maps'; // ADD THIS
+import House from '../../assets/images/houseView.png';
 
 export default function Home() {
   const [username, setUsername] = useState('Guest');
@@ -105,7 +106,7 @@ export default function Home() {
         </View>
       </View>
 
-      {/* Top Box Buttons */}
+      {/* Top Buttons */}
       <View style={styles.buttonContainer}>
         <TouchableOpacity style={styles.button}>
           <Ionicons name="location-sharp" size={24} color="white" />
@@ -121,12 +122,11 @@ export default function Home() {
         </TouchableOpacity>
       </View>
 
-      {/* Search box */}
+      {/* Search */}
       <View style={styles.searchContainer}>
         <TextInput
           style={styles.searchInput}
-          placeholder="Search room..."
-          placeholderTextColor={COLORS.placeholderText}
+          placeholder="Search room..."        
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
@@ -135,7 +135,7 @@ export default function Home() {
         </TouchableOpacity>
       </View>
 
-      {/* Category filter */}
+      {/* Categories */}
       <View style={styles.categoryWrapper}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           {categories.map((category) => (
@@ -154,7 +154,7 @@ export default function Home() {
         </ScrollView>
       </View>
 
-      {/* Properties list */}
+      {/* Properties */}
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.filteredDataContainer}>
           {filteredProperties.length > 0 ? (
@@ -165,7 +165,7 @@ export default function Home() {
                   <Image source={{ uri: property.image }} style={styles.propertyImage} />
                   <Text style={styles.propertyName}>{property.name}</Text>
                   <Text style={styles.propertyPrice}>₱{property.price}</Text>
-                  <Text style={styles.propertyLocation}>{property.location.address}</Text>
+                  <Text style={styles.propertyLocation}>{property.location?.address || ''}</Text>
                   <Text style={styles.propertyDescription}>{property.description}</Text>
                   
                   <TouchableOpacity style={styles.propertyButton} onPress={() => handlePropertyPress(property)}>
@@ -180,7 +180,7 @@ export default function Home() {
         </View>
       </ScrollView>
 
-      {/* Modal for property details */}
+      {/* Modal */}
       {selectedProperty && (
         <Modal
           animationType="slide"
@@ -189,7 +189,7 @@ export default function Home() {
           onRequestClose={handleCloseModal}
         >
           <View style={styles.modalContainer}>
-            <View style={styles.modalContent}>
+            <ScrollView contentContainerStyle={styles.modalContent}>
               <TouchableOpacity style={styles.closeButton} onPress={handleCloseModal}>
                 <Ionicons name="close" size={24} color={COLORS.primary} />
               </TouchableOpacity>
@@ -201,13 +201,40 @@ export default function Home() {
               <Text style={styles.modalStatus}>Status: {selectedProperty.status}</Text>
               <Text style={styles.modalPostedBy}>Posted by: {selectedProperty.postedBy}</Text>
               <Text style={styles.modalAmenities}>Amenities: {selectedProperty.amenities.join(', ')}</Text>
-              <TouchableOpacity style={styles.contactButton}>
-                <Text style={styles.contactButtonText}>Contact</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.contactButton}>
-                <Text style={styles.contactButtonText}>Navigate</Text>
-              </TouchableOpacity>
-            </View>
+
+              {/* Contact & Rent Buttons */}
+              <View style={styles.modalButtons}>
+                <TouchableOpacity style={styles.contactButton}>
+                  <Text style={styles.contactButtonText}>Contact</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.contactButton}>
+                  <Text style={styles.contactButtonText}>Rent</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Map */}
+              {selectedProperty.location?.latitude && selectedProperty.location?.longitude && (
+                <MapView
+                  style={styles.map}
+                  initialRegion={{
+                    latitude: selectedProperty.location.latitude,
+                    longitude: selectedProperty.location.longitude,
+                    latitudeDelta: 0.005,
+                    longitudeDelta: 0.005,
+                  }}
+                >
+                  <Marker
+                    coordinate={{
+                      latitude: selectedProperty.location.latitude,
+                      longitude: selectedProperty.location.longitude,
+                    }}
+                    title={selectedProperty.name}
+                    image={House}
+                    description={selectedProperty.location.address}
+                  />
+                </MapView>
+              )}
+            </ScrollView>
           </View>
         </Modal>
       )}
@@ -217,18 +244,7 @@ export default function Home() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.white },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    position: 'absolute',
-    top: 15,
-    left: 0,
-    right: 0,
-    padding: 15,
-    backgroundColor: 'white',
-    zIndex: 10,
-  },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', position: 'absolute', top: 15, left: 0, right: 0, padding: 15, backgroundColor: 'white', zIndex: 10 },
   welcomeText: { flex: 1, fontSize: 20, fontWeight: 'bold', color: COLORS.primary, paddingLeft: 10 },
   headerRight: { flexDirection: 'row', alignItems: 'center' },
   profileImage: { width: 50, height: 50, borderRadius: 40, borderWidth: 0.5, borderColor: COLORS.primary, marginLeft: 10 },
@@ -243,92 +259,29 @@ const styles = StyleSheet.create({
   categoryButtonActive: { backgroundColor: COLORS.primary },
   categoryText: { fontWeight: 'bold', color: '#333' },
   categoryTextActive: { color: 'white' },
-  filteredDataContainer: {
-    paddingHorizontal: 10,
-    marginTop: 20,
-  },
-    propertyCard: {
-      marginBottom: 20,
-      borderRadius: 12, // Rounded edges for a soft look
-      overflow: 'hidden',
-      backgroundColor: 'rgba(178, 212, 255, 0.3)', // Semi-transparent white background
-      backdropFilter: 'blur(23px)', // Glass-like blur effect
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.2,
-      shadowRadius: 10,
-      elevation: 6, // Shadow effect for Android
-      padding: 15, 
-      margin:10,
-      
-    },
-    propertyImage: {
-      width: '100%',
-      height: 180,
-      borderRadius: 12,
-    },
-    propertyDetailsContainer: {
-      
-      paddingLeft:5, // Adjusted top padding to create space between image and content
-    },
-    propertyName: {
-      fontSize: 20, // Increased font size for better readability
-      fontWeight: 'bold',
-      color: COLORS.primary,
-      paddingTop:10,
-      
-      marginBottom: 5, // Space between name and price
-    },
-    propertyPrice: {
-      fontSize: 18,
-      color: COLORS.border,
-      fontWeight: 'bold',
-      marginBottom: 5, // Space between price and description
-    },
-    propertyDescription: {
-      fontSize: 15,
-      color: '#666',
-       // Added space below description
-      height: 45, // Adjusted height to better fit longer descriptions
-      overflow: 'hidden', // Ensures long text is clipped
-    },
-    propertyLocation: {
-      fontSize: 15,
-      color: '#444',
-      fontStyle: 'italic',
-      marginBottom: 10, // Space before the button
-    },
-    propertyButton: {
-      backgroundColor: COLORS.primary,
-      paddingVertical: 12, // Increased padding for better button size
-      alignItems: 'center',
-      borderRadius: 14,
-      marginBottom: 10,
-    
-    },
-    propertyButtonText: {
-      color: 'white',
-      fontWeight: 'bold',
-      fontSize: 16,
-    },
-    noResultsText: {
-      textAlign: 'center',
-      color: COLORS.primary,
-      marginTop: 20,
-      fontSize: 16,
-    },
-  
-  modalContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' },
-  modalContent: { width: '90%', backgroundColor: 'white', borderRadius: 10, padding: 28, alignItems: 'center' },
-  closeButton: { position: 'absolute', top: 10, right: 10 ,},
-  modalImage: { width: '100%', height: 200, borderRadius: 10  },
-  modalName: { fontSize: 22, fontWeight: 'bold', color: COLORS.primary, marginVertical: 10 },
-  modalDescription: { fontSize: 16, color: '#666', textAlign: 'center', marginBottom: 10 },
-  modalLocation: { fontSize: 14, color: '#333' },
-  modalPrice: { fontSize: 16, color: COLORS.primary, marginVertical: 5 },
-  modalStatus: { fontSize: 14, color: '#333', marginVertical: 5 },
-  modalPostedBy: { fontSize: 14, color: '#333', marginVertical: 5 },
-  modalAmenities: { fontSize: 14, color: '#333', marginVertical: 5 },
-  contactButton: { backgroundColor: COLORS.primary, paddingVertical: 12, width: '100%', alignItems: 'center', marginVertical: 10, borderRadius: 8 },
-  contactButtonText: { color: 'white', fontWeight: 'bold' },
+  filteredDataContainer: { paddingHorizontal: 10, marginTop: 20 },
+  propertyCard: { marginBottom: 20, borderRadius: 12, overflow: 'hidden', backgroundColor: 'rgba(178, 212, 255, 0.3)',margin:15, },
+  propertyImage: { width: '100%', height: 200 },
+  propertyName: { fontSize: 20, fontWeight: 'bold', marginTop: 10, marginHorizontal: 10 },
+  propertyPrice: { fontSize: 16, fontWeight: '600', marginHorizontal: 10 },
+  propertyLocation: { marginHorizontal: 10, color: 'gray' },
+  propertyDescription: { marginHorizontal: 10, marginVertical: 5, color: 'gray' },
+  propertyButton: { margin: 10, backgroundColor: COLORS.primary, padding: 10, borderRadius: 8 },
+  propertyButtonText: { color: 'white', fontWeight: 'bold', textAlign: 'center' },
+  noResultsText: { textAlign: 'center', marginTop: 20, color: 'gray' },
+  modalContainer: { flex: 1, justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.5)', top:30, },
+  modalContent: { backgroundColor: 'white', margin: 20, borderRadius: 10, padding: 15 },
+  closeButton: { alignSelf: 'flex-end' },
+  modalImage: { width: '100%', height: 200, borderRadius: 10 },
+  modalName: { fontSize: 24, fontWeight: 'bold', marginTop: 10 },
+  modalDescription: { marginTop: 10 },
+  modalLocation: { marginTop: 5 },
+  modalPrice: { marginTop: 5 },
+  modalStatus: { marginTop: 5 },
+  modalPostedBy: { marginTop: 5 },
+  modalAmenities: { marginTop: 5 },
+  modalButtons: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 15 },
+  contactButton: { backgroundColor: COLORS.primary, flex: 1, marginHorizontal: 5, padding: 10, borderRadius: 8 },
+  contactButtonText: { color: 'white', textAlign: 'center', fontWeight: 'bold' },
+  map: { width: '100%', height: 250, marginTop: 20, borderRadius: 10 },
 });

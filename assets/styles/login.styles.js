@@ -45,7 +45,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: "700",
-    color: COLORS.textPrimary,
+    color: COLORS.primary,
     marginBottom: 8,
   },
   subtitle: {
@@ -62,13 +62,13 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     marginBottom: 8,
-    color: COLORS.textPrimary,
+    color: COLORS.primary,
     fontWeight: "500",
   },
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: COLORS.inputBackground,
+    backgroundColor: COLORS.white,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -80,7 +80,7 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    color: COLORS.textDark,
+    color: COLORS.primary,
   },
   eyeIcon: {
     padding: 8,

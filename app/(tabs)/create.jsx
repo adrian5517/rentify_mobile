@@ -1,239 +1,205 @@
-import {
-  View,
-  Text,
-  KeyboardAvoidingView,
-  ScrollView,
-  Platform,
-  TextInput,
-  TouchableOpacity,
-  Image,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
-import React from 'react';
-import { useRouter } from 'expo-router';
-import styles from '@/assets/styles/create.styles';
-import { Ionicons } from '@expo/vector-icons';
-import COLORS from '@/constant/colors';
-import * as ImagePicker from 'expo-image-picker';
-import { useAuthStore } from '@/store/authStore';
-import { API_URL } from '@/constant/api';
+import React, { useEffect, useState, useRef } from 'react';
+import { StyleSheet, View, Alert, Text, Button } from 'react-native';
+import MapView, { Marker, Polyline } from 'react-native-maps';
+import * as Location from 'expo-location';
+import MapboxDirections from '@mapbox/mapbox-sdk/services/directions';
+import { BlurView } from 'expo-blur';
+import House from '../../assets/images/houseView.png';
+
+const Person = require('../../assets/images/personView.png');
+
+const MAPBOX_TOKEN = 'pk.eyJ1IjoiYWRyaWFuNTUxNyIsImEiOiJjbTlyMHpubjYxcG9lMmtwdDVtc3FtaXRxIn0.6Qx1Pf_dIOCfRB7n7tWl1g';
+const directionsClient = MapboxDirections({ accessToken: MAPBOX_TOKEN });
 
 export default function Create() {
-  const [title, setTitle] = React.useState('');
-  const [address, setAddress] = React.useState('');
-  const [description, setDescription] = React.useState('');
-  const [price, setPrice] = React.useState('');
-  const [image, setImage] = React.useState(null);
-  const [isLoading, setIsLoading] = React.useState(false);
+  const [location, setLocation] = useState(null);
+  const [properties, setProperties] = useState([]); // <-- now fetching properties
+  const [routeCoords, setRouteCoords] = useState([]);
+  const [distance, setDistance] = useState(null);
+  const [duration, setDuration] = useState(null);
+  const [selectedProperty, setSelectedProperty] = useState(null);
+  const [isLocationPermissionGranted, setIsLocationPermissionGranted] = useState(false);
+  const [refresh, setRefresh] = useState(false);
+  const mapRef = useRef(null);
 
-  const { token, user } = useAuthStore(); // Ensure `user` is destructured to get `userId`
-  const router = useRouter();
-
-  const pickImage = async () => {
-    try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  // 1. Request permission and get current location
+  useEffect(() => {
+    const requestLocationPermission = async () => {
+      let { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'We need camera roll permissions to upload an image');
+        Alert.alert('Permission denied', 'Location permission is required');
         return;
       }
 
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.4,
-      });
+      setIsLocationPermissionGranted(true);
+      let loc = await Location.getCurrentPositionAsync({});
+      setLocation(loc.coords);
+    };
 
-      if (!result.canceled) {
-        setImage(result.assets[0].uri);
+    requestLocationPermission();
+  }, [refresh]);
+
+  // 2. Fetch properties from API
+  useEffect(() => {
+    const fetchProperties = async () => {
+      try {
+        const response = await fetch('https://rentify-server-ge0f.onrender.com/api/properties'); // <-- change your endpoint
+        const data = await response.json();
+        setProperties(data);
+      } catch (error) {
+        console.error('Failed to fetch properties:', error);
       }
-    } catch (error) {
-      console.error('Image Picker Error:', error);
-      Alert.alert('Error', 'Failed to pick image');
-    }
-  };
+    };
 
-  const handleSubmit = async () => {
-    if (!title.trim() || !address.trim() || !description.trim() || !price || !image) {
-      Alert.alert('Error', 'All fields are required');
-      return;
-    }
+    fetchProperties();
+  }, [refresh]);
 
-    if (!user?.id) {
-      Alert.alert('Error', 'User not authenticated');
-      return;
-    }
+  // 3. Get route from current location to selected property
+  useEffect(() => {
+    const fetchDirections = async () => {
+      if (selectedProperty && location) {
+        const response = await directionsClient
+          .getDirections({
+            profile: 'driving',
+            geometries: 'geojson',
+            waypoints: [
+              { coordinates: [location.longitude, location.latitude] },
+              { coordinates: [selectedProperty.location.longitude, selectedProperty.location.latitude] },
+            ],
+          })
+          .send();
 
-    try {
-      setIsLoading(true);
+        const route = response.body.routes[0];
+        const geometry = route.geometry;
 
-      const formData = new FormData();
-      // Basic property data
-      formData.append('name', title.trim());
-      formData.append('address', address.trim());
-      formData.append('description', description.trim());
-      formData.append('price', parseFloat(price));
-      formData.append('ownerId', user.id.toString());
+        const coords = geometry.coordinates.map(([lon, lat]) => ({
+          latitude: lat,
+          longitude: lon,
+        }));
 
-      // Image handling
-      const filename = image.split('/').pop();
-      const match = /\.(\w+)$/.exec(filename);
-      const type = match ? `image/${match[1]}` : 'image/jpeg';
+        setRouteCoords(coords);
+        setDistance(route.distance / 1000); // meters to km
+        setDuration(route.duration / 60); // seconds to minutes
 
-      formData.append('images', {
-        uri: Platform.OS === 'ios' ? image.replace('file://', '') : image,
-        name: filename || 'photo.jpg',
-        type,
-      });
-
-      const response = await fetch(`${API_URL}/api/property`, {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: formData,
-      });
-
-      const responseText = await response.text();
-      console.log('Response:', responseText);
-
-      if (!response.ok) {
-        throw new Error(`Server error: ${responseText}`);
+        if (mapRef.current) {
+          mapRef.current.animateToRegion({
+            latitude: selectedProperty.location.latitude,
+            longitude: selectedProperty.location.longitude,
+            latitudeDelta: 0.01,
+            longitudeDelta: 0.01,
+          });
+        }
       }
+    };
 
-      Alert.alert('Success', 'Property created successfully!');
-      setTitle('');
-      setAddress('');
-      setDescription('');
-      setPrice('');
-      setImage(null);
-      router.push('/(tabs)/home');
-    } catch (error) {
-      console.error('Submit Error:', error);
-      Alert.alert('Error', 'Failed to create property. Please check your connection and try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    fetchDirections();
+  }, [selectedProperty, location, refresh]);
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <ScrollView contentContainerStyle={styles.container} style={styles.scrollViewStyle}>
-        <View style={styles.card}>
-          <Text style={styles.title}>Add Property</Text>
-          <Text style={styles.subtitle}>Add a new property to your list</Text>
+    <View style={styles.container}>
+      <MapView
+        ref={mapRef}
+        style={StyleSheet.absoluteFill}
+        initialRegion={{
+          latitude: 13.6218,
+          longitude: 123.1948,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        }}
+        showsUserLocation={true}
+        showsMyLocationButton={true}
+        zoomEnabled={true}
+      >
+        {/* User marker */}
+        {location && (
+          <Marker
+            coordinate={{
+              latitude: location.latitude,
+              longitude: location.longitude,
+            }}
+            
+            image={Person}
+          />
+        )}
 
-          <View style={styles.formGroup}>
-            <Text style={styles.label}>Property Name</Text>
-            <View style={styles.inputContainer}>
-              <Ionicons
-                name="home-outline"
-                size={20}
-                color={COLORS.textSecondary}
-                style={styles.inputIcon}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Enter property name"
-                placeholderTextColor={COLORS.placeholderText}
-                value={title}
-                onChangeText={setTitle}
-              />
-            </View>
-          </View>
+        {/* Property Markers */}
+        {properties.map((property, index) => (
+          <Marker
+            key={property._id || index}
+            coordinate={{
+              latitude: property.location.latitude,
+              longitude: property.location.longitude,
+            }}
+            title={property.name}
+            description={`🏠 ${property.price}\n💵 ${property.propertyType}\n📍 ${property.location.address}`}
+            pinColor="blue"
+            image={House}
+            onPress={() => setSelectedProperty(property)}
+            
+          />
+        ))}
 
-          <View style={styles.formGroup}>
-            <Text style={styles.label}>Address</Text>
-            <View style={[styles.inputContainer, { minHeight: 60 }]}>
-              <Ionicons
-                name="location-outline"
-                size={20}
-                color={COLORS.textSecondary}
-                style={[styles.inputIcon, { marginTop: 8 }]}
-              />
-              <TextInput
-                style={[styles.input, { textAlignVertical: 'top', paddingTop: 8, height: 60 }]}
-                placeholder="Enter property address"
-                placeholderTextColor={COLORS.placeholderText}
-                value={address}
-                onChangeText={setAddress}
-              />
-            </View>
-          </View>
+        {/* Route line */}
+        {routeCoords.length > 0 && (
+          <Polyline coordinates={routeCoords} strokeWidth={4} strokeColor="blue" />
+        )}
+      </MapView>
 
-          <View style={styles.formGroup}>
-            <Text style={styles.label}>Price</Text>
-            <View style={styles.inputContainer}>
-              <Ionicons
-                name="cash-outline"
-                size={20}
-                color={COLORS.textSecondary}
-                style={styles.inputIcon}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Enter property price"
-                placeholderTextColor={COLORS.placeholderText}
-                value={price}
-                onChangeText={setPrice}
-                keyboardType="decimal-pad"
-              />
-            </View>
-          </View>
+      {/* Distance & ETA Info */}
+      {distance && duration && selectedProperty && (
+        <BlurView intensity={50} tint="light" style={styles.infoBox}>
+        <Text style={styles.infoText}>
+          Distance to {selectedProperty.name}: {distance.toFixed(2)} km | ETA: {duration.toFixed(1)} mins
+          ₱{selectedProperty.price}
+        </Text>
+      </BlurView>
+      )}
 
-          <View style={styles.formGroup}>
-            <Text style={styles.label}>Property Image</Text>
-            <TouchableOpacity style={styles.imagePicker} onPress={pickImage}>
-              {image ? (
-                <Image source={{ uri: image }} style={styles.previewImage} />
-              ) : (
-                <View style={styles.placeholderContainer}>
-                  <Ionicons name="image-outline" size={40} color={COLORS.textSecondary} />
-                  <Text style={styles.placeholderText}>Tap to select image</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          </View>
+      {/* Refresh Button */}
+      <Button title="Refresh Map" onPress={() => setRefresh(!refresh)} />
 
-          <View style={styles.formGroup}>
-            <Text style={styles.label}>Description</Text>
-            <TextInput
-              style={styles.textArea}
-              placeholder="Write details about your property..."
-              placeholderTextColor={COLORS.placeholderText}
-              value={description}
-              onChangeText={setDescription}
-              multiline
-              numberOfLines={4}
-            />
-          </View>
-
-          <TouchableOpacity
-            style={styles.button}
-            onPress={handleSubmit}
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <ActivityIndicator color={COLORS.white} />
-            ) : (
-              <>
-                <Ionicons
-                  name="add-circle-outline"
-                  size={20}
-                  color={COLORS.white}
-                  style={styles.buttonIcon}
-                />
-                <Text style={styles.buttonText}>Add Property</Text>
-              </>
-            )}
-          </TouchableOpacity>
+      {/* Permission Fallback */}
+      {!isLocationPermissionGranted && (
+        <View style={styles.permissionView}>
+          <Text style={styles.permissionText}>Location permission is required</Text>
         </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      )}
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  infoBox: {
+    position: 'absolute',
+    bottom: 100,
+    alignSelf: 'center',
+    width: '90%',
+    padding: 16,
+    borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  infoText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: 'white',
+  },
+  permissionView: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: [{ translateX: -150 }, { translateY: -30 }],
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    padding: 20,
+    borderRadius: 10,
+  },
+  permissionText: {
+    color: 'white',
+    fontSize: 18,
+    textAlign: 'center',
+  },
+});
