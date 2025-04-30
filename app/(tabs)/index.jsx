@@ -269,7 +269,7 @@ const styles = StyleSheet.create({
   propertyButton: { margin: 10, backgroundColor: COLORS.primary, padding: 10, borderRadius: 8 },
   propertyButtonText: { color: 'white', fontWeight: 'bold', textAlign: 'center' },
   noResultsText: { textAlign: 'center', marginTop: 20, color: 'gray' },
-  modalContainer: { flex: 1, justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.5)', top:30, },
+  modalContainer: { flex: 1, justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.5)', paddingTop: 30 },
   modalContent: { backgroundColor: 'white', margin: 20, borderRadius: 10, padding: 15 },
   closeButton: { alignSelf: 'flex-end' },
   modalImage: { width: '100%', height: 200, borderRadius: 10 },
