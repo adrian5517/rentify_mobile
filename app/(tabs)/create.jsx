@@ -132,7 +132,7 @@ export default function Create() {
             }}
             title={property.name}
             description={`🏠 ${property.price}\n💵 ${property.propertyType}\n📍 ${property.location.address}`}
-            pinColor="blue"
+            pinColor="green"
             image={House}
             onPress={() => setSelectedProperty(property)}
             

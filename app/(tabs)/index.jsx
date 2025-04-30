@@ -262,7 +262,7 @@ const styles = StyleSheet.create({
   filteredDataContainer: { paddingHorizontal: 10, marginTop: 20 },
   propertyCard: { marginBottom: 20, borderRadius: 12, overflow: 'hidden', backgroundColor: 'rgba(178, 212, 255, 0.3)',margin:15, },
   propertyImage: { width: '100%', height: 200 },
-  propertyName: { fontSize: 20, fontWeight: 'bold', marginTop: 10, marginHorizontal: 10 },
+  propertyName: { fontSize: 20, fontWeight: 'bold', marginTop: 10, marginHorizontal: 10 ,color: COLORS.primary },
   propertyPrice: { fontSize: 16, fontWeight: '600', marginHorizontal: 10 },
   propertyLocation: { marginHorizontal: 10, color: 'gray' },
   propertyDescription: { marginHorizontal: 10, marginVertical: 5, color: 'gray' },
