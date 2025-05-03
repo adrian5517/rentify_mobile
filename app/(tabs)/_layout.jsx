@@ -57,7 +57,7 @@ export default function TabLayout() {
       />
      
       <Tabs.Screen
-        name="schedule"
+        name="CreateProperty"
         options={{
           title: 'Create',
           tabBarIcon: ({ color, focused }) => (

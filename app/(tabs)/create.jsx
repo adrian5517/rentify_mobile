@@ -4,8 +4,9 @@ import MapView, { Marker, Polyline } from 'react-native-maps';
 import * as Location from 'expo-location';
 import MapboxDirections from '@mapbox/mapbox-sdk/services/directions';
 import { BlurView } from 'expo-blur';
-import House from '../../assets/images/houseView.png';
 
+// Use require for consistent asset loading
+const House = require('../../assets/images/houseView.png');
 const Person = require('../../assets/images/personView.png');
 
 const MAPBOX_TOKEN = 'pk.eyJ1IjoiYWRyaWFuNTUxNyIsImEiOiJjbTlyMHpubjYxcG9lMmtwdDVtc3FtaXRxIn0.6Qx1Pf_dIOCfRB7n7tWl1g';
@@ -13,7 +14,7 @@ const directionsClient = MapboxDirections({ accessToken: MAPBOX_TOKEN });
 
 export default function Create() {
   const [location, setLocation] = useState(null);
-  const [properties, setProperties] = useState([]); // <-- now fetching properties
+  const [properties, setProperties] = useState([]);
   const [routeCoords, setRouteCoords] = useState([]);
   const [distance, setDistance] = useState(null);
   const [duration, setDuration] = useState(null);
@@ -22,30 +23,28 @@ export default function Create() {
   const [refresh, setRefresh] = useState(false);
   const mapRef = useRef(null);
 
-  // 1. Request permission and get current location
   useEffect(() => {
     const requestLocationPermission = async () => {
-      let { status } = await Location.requestForegroundPermissionsAsync();
+      const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert('Permission denied', 'Location permission is required');
         return;
       }
 
       setIsLocationPermissionGranted(true);
-      let loc = await Location.getCurrentPositionAsync({});
+      const loc = await Location.getCurrentPositionAsync({});
       setLocation(loc.coords);
     };
 
     requestLocationPermission();
   }, [refresh]);
 
-  // 2. Fetch properties from API
   useEffect(() => {
     const fetchProperties = async () => {
       try {
-        const response = await fetch('https://rentify-server-ge0f.onrender.com/api/properties'); // <-- change your endpoint
+        const response = await fetch('https://rentify-server-ge0f.onrender.com/api/properties');
         const data = await response.json();
-        setProperties(data);
+        setProperties(Array.isArray(data) ? data : []);
       } catch (error) {
         console.error('Failed to fetch properties:', error);
       }
@@ -54,40 +53,39 @@ export default function Create() {
     fetchProperties();
   }, [refresh]);
 
-  // 3. Get route from current location to selected property
   useEffect(() => {
     const fetchDirections = async () => {
-      if (selectedProperty && location) {
-        const response = await directionsClient
-          .getDirections({
-            profile: 'driving',
-            geometries: 'geojson',
-            waypoints: [
-              { coordinates: [location.longitude, location.latitude] },
-              { coordinates: [selectedProperty.location.longitude, selectedProperty.location.latitude] },
-            ],
-          })
-          .send();
+      if (selectedProperty && location && selectedProperty.location) {
+        try {
+          const response = await directionsClient
+            .getDirections({
+              profile: 'driving',
+              geometries: 'geojson',
+              waypoints: [
+                { coordinates: [location.longitude, location.latitude] },
+                { coordinates: [selectedProperty.location.longitude, selectedProperty.location.latitude] },
+              ],
+            })
+            .send();
 
-        const route = response.body.routes[0];
-        const geometry = route.geometry;
+          const route = response.body.routes[0];
+          const coords = route.geometry.coordinates.map(([lon, lat]) => ({
+            latitude: lat,
+            longitude: lon,
+          }));
 
-        const coords = geometry.coordinates.map(([lon, lat]) => ({
-          latitude: lat,
-          longitude: lon,
-        }));
+          setRouteCoords(coords);
+          setDistance(route.distance / 1000); // meters to km
+          setDuration(route.duration / 60); // seconds to minutes
 
-        setRouteCoords(coords);
-        setDistance(route.distance / 1000); // meters to km
-        setDuration(route.duration / 60); // seconds to minutes
-
-        if (mapRef.current) {
-          mapRef.current.animateToRegion({
+          mapRef.current?.animateToRegion({
             latitude: selectedProperty.location.latitude,
             longitude: selectedProperty.location.longitude,
             latitudeDelta: 0.01,
             longitudeDelta: 0.01,
           });
+        } catch (err) {
+          console.error('Failed to fetch directions:', err);
         }
       }
     };
@@ -110,55 +108,49 @@ export default function Create() {
         showsMyLocationButton={true}
         zoomEnabled={true}
       >
-        {/* User marker */}
         {location && (
           <Marker
             coordinate={{
               latitude: location.latitude,
               longitude: location.longitude,
             }}
-            
             image={Person}
           />
         )}
 
-        {/* Property Markers */}
         {properties.map((property, index) => (
-          <Marker
-            key={property._id || index}
-            coordinate={{
-              latitude: property.location.latitude,
-              longitude: property.location.longitude,
-            }}
-            title={property.name}
-            description={`🏠 ${property.price}\n💵 ${property.propertyType}\n📍 ${property.location.address}`}
-            pinColor="green"
-            image={House}
-            onPress={() => setSelectedProperty(property)}
-            
-          />
+          property.location && (
+            <Marker
+              key={property._id || index}
+              coordinate={{
+                latitude: property.location.latitude,
+                longitude: property.location.longitude,
+              }}
+              title={property.name}
+              description={`🏠 ${property.price}\n💵 ${property.propertyType}\n📍 ${property.location.address}`}
+              pinColor="green"
+              image={House}
+              onPress={() => setSelectedProperty(property)}
+            />
+          )
         ))}
 
-        {/* Route line */}
         {routeCoords.length > 0 && (
           <Polyline coordinates={routeCoords} strokeWidth={4} strokeColor="blue" />
         )}
       </MapView>
 
-      {/* Distance & ETA Info */}
       {distance && duration && selectedProperty && (
         <BlurView intensity={50} tint="light" style={styles.infoBox}>
-        <Text style={styles.infoText}>
-          Distance to {selectedProperty.name}: {distance.toFixed(2)} km | ETA: {duration.toFixed(1)} mins
-          ₱{selectedProperty.price}
-        </Text>
-      </BlurView>
+          <Text style={styles.infoText}>
+            Distance to {selectedProperty.name}: {distance.toFixed(2)} km | ETA: {duration.toFixed(1)} mins {'\n'}
+            ₱{selectedProperty.price}
+          </Text>
+        </BlurView>
       )}
 
-      {/* Refresh Button */}
       <Button title="Refresh Map" onPress={() => setRefresh(!refresh)} />
 
-      {/* Permission Fallback */}
       {!isLocationPermissionGranted && (
         <View style={styles.permissionView}>
           <Text style={styles.permissionText}>Location permission is required</Text>
@@ -182,6 +174,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.3)',
+    backgroundColor: 'rgba(0,0,0,0.4)',
   },
   infoText: {
     fontSize: 16,
