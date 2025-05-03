@@ -30,6 +30,7 @@ export default function CreateProperty() {
     images: [],
   });
 
+  // Fetch current location & get address on mount
   useEffect(() => {
     (async () => {
       const imageStatus = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -45,16 +46,29 @@ export default function CreateProperty() {
       }
 
       const location = await Location.getCurrentPositionAsync({});
-      setProperty(prev => ({
-        ...prev,
-        location: {
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude,
-        },
-      }));
+      const coords = {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      };
+
+      setProperty(prev => ({ ...prev, location: coords }));
+      await fetchAddressFromCoords(coords);
       setLoading(false);
     })();
   }, []);
+
+  // Get address from coordinates
+  const fetchAddressFromCoords = async (coords) => {
+    try {
+      const [place] = await Location.reverseGeocodeAsync(coords);
+      if (place) {
+        const formattedAddress = `${place.name || ''} ${place.street || ''}, ${place.city || ''}, ${place.region || ''} ${place.postalCode || ''}, ${place.country || ''}`;
+        setProperty(prev => ({ ...prev, address: formattedAddress }));
+      }
+    } catch (error) {
+      console.log('Error fetching address:', error);
+    }
+  };
 
   const handleImagePick = async () => {
     if (property.images.length >= 5) {
@@ -64,7 +78,7 @@ export default function CreateProperty() {
 
     const result = await ImagePicker.launchImageLibraryAsync({
       allowsMultipleSelection: true,
-      mediaTypes: ImagePicker.MediaTypeOptions.Images, // ✅ FIXED
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 1,
     });
 
@@ -77,28 +91,23 @@ export default function CreateProperty() {
     }
   };
 
-  const handleMapPress = (event) => {
+  const handleMapPress = async (event) => {
     const { coordinate } = event.nativeEvent;
-    setProperty(prev => ({
-      ...prev,
-      location: coordinate,
-    }));
+    setProperty(prev => ({ ...prev, location: coordinate }));
+    await fetchAddressFromCoords(coordinate);
   };
 
-  const handleMarkerDragEnd = (e) => {
+  const handleMarkerDragEnd = async (e) => {
     const { coordinate } = e.nativeEvent;
-    setProperty(prev => ({
-      ...prev,
-      location: coordinate,
-    }));
+    setProperty(prev => ({ ...prev, location: coordinate }));
+    await fetchAddressFromCoords(coordinate);
   };
 
   const handleSubmit = async () => {
     const { name, type, price, description, status, amenities, location, images, address } = property;
 
-    // Make sure all required fields are validated, including location and images
     if (!name || !type || !price || !description || !status || !amenities || !location || !address || images.length === 0) {
-      Alert.alert('Missing Fields', 'Please complete all fields, including the map location, address, and images.');
+      Alert.alert('Missing Fields', 'Please complete all fields, including map and images.');
       return;
     }
 
@@ -110,12 +119,12 @@ export default function CreateProperty() {
       formData.append('price', price);
       formData.append('propertyType', type);
       formData.append('status', status.toLowerCase());
-      formData.append('location[latitude]', location.latitude);
-      formData.append('location[longitude]', location.longitude);
-      formData.append('location[address]', address);
+      formData.append('latitude', location.latitude);
+      formData.append('longitude', location.longitude);
+      formData.append('address', address);
 
       const amenitiesArray = amenities.split(',').map(item => item.trim());
-      amenitiesArray.forEach(a => formData.append('amenities[]', a));
+      amenitiesArray.forEach(a => formData.append('amenities', a));
 
       images.forEach((uri, index) => {
         const filename = uri.split('/').pop();
@@ -166,6 +175,7 @@ export default function CreateProperty() {
         value={property.name}
         onChangeText={text => setProperty(prev => ({ ...prev, name: text }))}
         placeholder="e.g. Green Hills Apartment"
+        placeholderTextColor="#999"
       />
 
       <Text style={styles.label}>Property Type:</Text>
@@ -173,16 +183,11 @@ export default function CreateProperty() {
         style={styles.input}
         value={property.type}
         onChangeText={text => setProperty(prev => ({ ...prev, type: text }))}
-        placeholder="e.g. Apartment, Condo"
+        placeholder="e.g. Apartment, Condo , Room , Dorm"
+        placeholderTextColor="#999"
       />
 
-      <Text style={styles.label}>Address:</Text>
-      <TextInput
-        style={styles.input}
-        value={property.address}
-        onChangeText={text => setProperty(prev => ({ ...prev, address: text }))}
-        placeholder="e.g. 123 Main St"
-      />
+      
 
       <Text style={styles.label}>Price (₱):</Text>
       <TextInput
@@ -190,7 +195,8 @@ export default function CreateProperty() {
         keyboardType="numeric"
         value={property.price}
         onChangeText={text => setProperty(prev => ({ ...prev, price: text }))}
-        placeholder="e.g. 5000000"
+        placeholder="e.g. 5000"
+        placeholderTextColor="#999"
       />
 
       <Text style={styles.label}>Description:</Text>
@@ -200,6 +206,7 @@ export default function CreateProperty() {
         value={property.description}
         onChangeText={text => setProperty(prev => ({ ...prev, description: text }))}
         placeholder="Write something about the property"
+        placeholderTextColor="#999"
       />
 
       <TouchableOpacity style={styles.button} onPress={() => setStep(2)}>
@@ -218,7 +225,7 @@ export default function CreateProperty() {
         placeholder="e.g. For Sale, For Rent"
       />
 
-      <Text style={styles.label}>Amenities:</Text>
+      <Text style={styles.label}>Amenities (comma-separated):</Text>
       <TextInput
         style={styles.input}
         value={property.amenities}
@@ -233,8 +240,8 @@ export default function CreateProperty() {
         <MapView
           style={styles.map}
           initialRegion={{
-            latitude: property.location?.latitude || 14.5995,
-            longitude: property.location?.longitude || 120.9842,
+            latitude: property.location?.latitude || 13.41,
+            longitude: property.location?.longitude || 122.55,
             latitudeDelta: 0.01,
             longitudeDelta: 0.01,
           }}
@@ -249,6 +256,13 @@ export default function CreateProperty() {
           )}
         </MapView>
       )}
+
+      <Text style={styles.label}>Address (Auto-filled):</Text>
+      <TextInput
+        style={[styles.input, { backgroundColor: '#eee' }]}
+        value={property.address}
+        editable={false}
+      />
 
       <Text style={styles.label}>Selected Images:</Text>
       <ScrollView horizontal>
@@ -307,30 +321,30 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     alignItems: 'center',
   },
+  buttonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
   secondaryButton: {
     marginTop: 10,
     backgroundColor: '#7f8c8d',
     padding: 12,
     borderRadius: 5,
     alignItems: 'center',
-    },
-    buttonText: {
+  },
+  secondaryText: {
     color: '#fff',
     fontWeight: 'bold',
-    },
-    secondaryText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    },
-    map: {
+  },
+  map: {
     width: '100%',
     height: 300,
     marginVertical: 20,
-    },
-    imagePreview: {
+  },
+  imagePreview: {
     width: 100,
     height: 100,
     marginRight: 10,
     borderRadius: 8,
-    },
-    });
+  },
+});

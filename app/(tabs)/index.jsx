@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, ScrollView, StyleSheet, Image, TextInput, TouchableOpacity, Modal, StatusBar as RNStatusBar } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import COLORS from '../../constant/colors';
 import Fuse from 'fuse.js';
-import MapView, { Marker } from 'react-native-maps'; // ADD THIS
+import MapView, { Marker } from 'react-native-maps';
 import House from '../../assets/images/houseView.png';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 
 export default function Home() {
   const [username, setUsername] = useState('Guest');
@@ -16,6 +17,7 @@ export default function Home() {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedProperty, setSelectedProperty] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const navigation = useNavigation();
 
   const categories = ['All', 'Apartment', 'Condo', 'House', 'Dorm'];
 
@@ -24,25 +26,20 @@ export default function Home() {
     threshold: 0.3,
   };
 
-  useEffect(() => {
-    const loadUserDetails = async () => {
-      try {
-        const storedUsername = await AsyncStorage.getItem('username');
-        const storedProfilePicture = await AsyncStorage.getItem('profilePicture');
-        setUsername(storedUsername || 'Guest');
-        setProfilePicture(
-          storedProfilePicture && storedProfilePicture.startsWith('http')
-            ? storedProfilePicture
-            : 'https://example.com/default-profile.png'
-        );
-      } catch (error) {
-        console.error('Error loading user details:', error);
-      }
-    };
-
-    loadUserDetails();
-    fetchProperties();
-  }, []);
+  const loadUserDetails = async () => {
+    try {
+      const storedUsername = await AsyncStorage.getItem('username');
+      const storedProfilePicture = await AsyncStorage.getItem('profilePicture');
+      setUsername(storedUsername || 'Guest');
+      setProfilePicture(
+        storedProfilePicture && storedProfilePicture.startsWith('http')
+          ? storedProfilePicture
+          : 'https://example.com/default-profile.png'
+      );
+    } catch (error) {
+      console.error('Error loading user details:', error);
+    }
+  };
 
   const fetchProperties = async () => {
     try {
@@ -56,6 +53,14 @@ export default function Home() {
       console.error('Error fetching properties:', error);
     }
   };
+
+  // Auto-refresh when Home screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      loadUserDetails();
+      fetchProperties();
+    }, [])
+  );
 
   useEffect(() => {
     let filtered = properties;
@@ -89,6 +94,10 @@ export default function Home() {
     setSelectedProperty(null);
   };
 
+  const handleCreatePress = () => {
+    navigation.navigate('CreateProperty');
+  };
+
   return (
     <View style={[styles.container, { paddingTop: statusBarHeight }]}>
       <RNStatusBar barStyle="dark-content" backgroundColor={COLORS.white} />
@@ -112,7 +121,7 @@ export default function Home() {
           <Ionicons name="location-sharp" size={24} color="white" />
           <Text style={styles.buttonText}>Nearby</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.button}>
+        <TouchableOpacity style={styles.button} onPress={handleCreatePress}>
           <Ionicons name="add-circle" size={24} color="white" />
           <Text style={styles.buttonText}>Create</Text>
         </TouchableOpacity>
@@ -126,7 +135,8 @@ export default function Home() {
       <View style={styles.searchContainer}>
         <TextInput
           style={styles.searchInput}
-          placeholder="Search room..."        
+          placeholder="Search room..."
+          placeholderTextColor="#999"
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
@@ -155,93 +165,117 @@ export default function Home() {
       </View>
 
       {/* Properties */}
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.filteredDataContainer}>
-          {filteredProperties.length > 0 ? (
-            filteredProperties.map((property, index) => {
-              if (!property || !property.image) return null;
-              return (
-                <View key={index} style={styles.propertyCard}>
-                  <Image source={{ uri: property.image }} style={styles.propertyImage} />
-                  <Text style={styles.propertyName}>{property.name}</Text>
-                  <Text style={styles.propertyPrice}>₱{property.price}</Text>
-                  <Text style={styles.propertyLocation}>{property.location?.address || ''}</Text>
-                  <Text style={styles.propertyDescription}>{property.description}</Text>
-                  
-                  <TouchableOpacity style={styles.propertyButton} onPress={() => handlePropertyPress(property)}>
-                    <Text style={styles.propertyButtonText}>View Details</Text>
-                  </TouchableOpacity>
-                </View>
-              );
-            })
-          ) : (
-            <Text style={styles.noResultsText}>No properties found</Text>
-          )}
-        </View>
-      </ScrollView>
+      <ScrollView contentContainerStyle={{ ...styles.scrollContent, paddingBottom: 100 }}>
+  <View style={styles.filteredDataContainer}>
+    {filteredProperties.length > 0 ? (
+      filteredProperties.map((property, index) => {
+        // Get the first image from the array (if available)
+        const firstImage = property.images && property.images.length > 0
+          ? `https://rentify-server-ge0f.onrender.com${property.images[0]}`
+          : property.image
+            ? `https://rentify-server-ge0f.onrender.com${property.image}`
+            : 'https://picsum.photos/200/300'; // Fallback image if no images are available
 
-      {/* Modal */}
-      {selectedProperty && (
-        <Modal
-          animationType="slide"
-          transparent={true}
-          visible={modalVisible}
-          onRequestClose={handleCloseModal}
-        >
-          <View style={styles.modalContainer}>
-            <ScrollView contentContainerStyle={styles.modalContent}>
-              <TouchableOpacity style={styles.closeButton} onPress={handleCloseModal}>
-                <Ionicons name="close" size={24} color={COLORS.primary} />
-              </TouchableOpacity>
-              <Image source={{ uri: selectedProperty.image }} style={styles.modalImage} />
-              <Text style={styles.modalName}>{selectedProperty.name}</Text>
-              <Text style={styles.modalDescription}>{selectedProperty.description}</Text>
-              <Text style={styles.modalLocation}>Location: {selectedProperty.location?.address || 'N/A'}</Text>
-              <Text style={styles.modalPrice}>₱{selectedProperty.price}</Text>
-              <Text style={styles.modalStatus}>Status: {selectedProperty.status}</Text>
-              <Text style={styles.modalPostedBy}>Posted by: {selectedProperty.postedBy}</Text>
-              <Text style={styles.modalAmenities}>Amenities: {selectedProperty.amenities.join(', ')}</Text>
+        const location = property.location?.address || 'Location not available';
 
-              {/* Contact & Rent Buttons */}
-              <View style={styles.modalButtons}>
-                <TouchableOpacity style={styles.contactButton}>
-                  <Text style={styles.contactButtonText}>Contact</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.contactButton}>
-                  <Text style={styles.contactButtonText}>Rent</Text>
-                </TouchableOpacity>
-              </View>
+        return (
+          <View key={property._id || index} style={styles.propertyCard}>
+            {/* Display the first image or fallback */}
+            <Image
+              source={{ uri: firstImage }}
+              style={styles.propertyImage}
+              onError={() => console.log('Image failed to load')}
+            />
+            <Text style={styles.propertyName}>{property.name}</Text>
+            <Text style={styles.propertyPrice}>₱{property.price}</Text>
+            <Text style={styles.propertyLocation}>{location}</Text>
+            <Text style={styles.propertyDescription}>{property.description}</Text>
 
-              {/* Map */}
-              {selectedProperty.location?.latitude && selectedProperty.location?.longitude && (
-                <MapView
-                  style={styles.map}
-                  initialRegion={{
-                    latitude: selectedProperty.location.latitude,
-                    longitude: selectedProperty.location.longitude,
-                    latitudeDelta: 0.005,
-                    longitudeDelta: 0.005,
-                  }}
-                >
-                  <Marker
-                    coordinate={{
-                      latitude: selectedProperty.location.latitude,
-                      longitude: selectedProperty.location.longitude,
-                    }}
-                    title={selectedProperty.name}
-                    image={House}
-                    description={selectedProperty.location.address}
-                  />
-                </MapView>
-              )}
-            </ScrollView>
+            <TouchableOpacity
+              style={styles.propertyButton}
+              onPress={() => handlePropertyPress(property)}
+            >
+              <Text style={styles.propertyButtonText}>View Details</Text>
+            </TouchableOpacity>
           </View>
-        </Modal>
-      )}
-    </View>
-  );
-}
+        );
+      })
+    ) : (
+      <Text style={styles.noResultsText}>No properties found</Text>
+    )}
+  </View>
+</ScrollView>
 
+{/* Modal */}
+{selectedProperty && (
+  <Modal
+    animationType="slide"
+    transparent={true}
+    visible={modalVisible}
+    onRequestClose={handleCloseModal}
+  >
+    <View style={styles.modalContainer}>
+      <ScrollView contentContainerStyle={styles.modalContent}>
+        <TouchableOpacity style={styles.closeButton} onPress={handleCloseModal}>
+          <Ionicons name="close" size={24} color={COLORS.primary} />
+        </TouchableOpacity>
+        
+        {/* Handle image loading in modal with fallback */}
+        <Image
+          source={{
+            uri: selectedProperty.image
+              ? `https://rentify-server-ge0f.onrender.com${selectedProperty.image}`
+              : 'https://picsum.photos/200/300', // Fallback image
+          }}
+          style={styles.modalImage}
+          onError={() => console.log('Image failed to load in modal')}
+        />
+        
+        <Text style={styles.modalName}>{selectedProperty.name}</Text>
+        <Text style={styles.modalDescription}>{selectedProperty.description}</Text>
+        <Text style={styles.modalLocation}>Location: {selectedProperty.location?.address || 'N/A'}</Text>
+        <Text style={styles.modalPrice}>₱{selectedProperty.price}</Text>
+        <Text style={styles.modalStatus}>Status: {selectedProperty.status}</Text>
+        <Text style={styles.modalPostedBy}>Posted by: {selectedProperty.postedBy}</Text>
+        <Text style={styles.modalAmenities}>Amenities: {selectedProperty.amenities.join(', ')}</Text>
+
+        <View style={styles.modalButtons}>
+          <TouchableOpacity style={styles.contactButton}>
+            <Text style={styles.contactButtonText}>Contact</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.contactButton}>
+            <Text style={styles.contactButtonText}>Rent</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Check for location and render map if available */}
+        {selectedProperty.location?.latitude && selectedProperty.location?.longitude && (
+          <MapView
+            style={styles.map}
+            initialRegion={{
+              latitude: selectedProperty.location.latitude,
+              longitude: selectedProperty.location.longitude,
+              latitudeDelta: 0.005,
+              longitudeDelta: 0.005,
+            }}
+          >
+            <Marker
+              coordinate={{
+                latitude: selectedProperty.location.latitude,
+                longitude: selectedProperty.location.longitude,
+              }}
+              title={selectedProperty.name}
+            />
+          </MapView>
+        )}
+      </ScrollView>
+    </View>
+  </Modal>
+)}
+
+                    </View>
+                    );
+                    }
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.white },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', position: 'absolute', top: 15, left: 0, right: 0, padding: 15, backgroundColor: 'white', zIndex: 10 },
