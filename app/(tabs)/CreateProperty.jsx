@@ -30,7 +30,6 @@ export default function CreateProperty() {
     images: [],
   });
 
-  // Fetch current location & get address on mount
   useEffect(() => {
     (async () => {
       const imageStatus = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -57,7 +56,6 @@ export default function CreateProperty() {
     })();
   }, []);
 
-  // Get address from coordinates
   const fetchAddressFromCoords = async (coords) => {
     try {
       const [place] = await Location.reverseGeocodeAsync(coords);
@@ -187,8 +185,6 @@ export default function CreateProperty() {
         placeholderTextColor="#999"
       />
 
-      
-
       <Text style={styles.label}>Price (₱):</Text>
       <TextInput
         style={styles.input}
@@ -201,7 +197,7 @@ export default function CreateProperty() {
 
       <Text style={styles.label}>Description:</Text>
       <TextInput
-        style={styles.input}
+        style={[styles.input, { height: 80 }]}
         multiline
         value={property.description}
         onChangeText={text => setProperty(prev => ({ ...prev, description: text }))}
@@ -209,14 +205,6 @@ export default function CreateProperty() {
         placeholderTextColor="#999"
       />
 
-      <TouchableOpacity style={styles.button} onPress={() => setStep(2)}>
-        <Text style={styles.buttonText}>Next</Text>
-      </TouchableOpacity>
-    </>
-  );
-
-  const renderStep2 = () => (
-    <>
       <Text style={styles.label}>Status:</Text>
       <TextInput
         style={styles.input}
@@ -232,6 +220,16 @@ export default function CreateProperty() {
         onChangeText={text => setProperty(prev => ({ ...prev, amenities: text }))}
         placeholder="e.g. Pool, Gym, Parking"
       />
+
+      <TouchableOpacity style={styles.button} onPress={() => setStep(2)}>
+        <Text style={styles.buttonText}>Next</Text>
+      </TouchableOpacity>
+    </>
+  );
+
+  const renderStep2 = () => (
+    <>
+      
 
       <Text style={styles.label}>Select Location on Map:</Text>
       {loading ? (
@@ -287,64 +285,87 @@ export default function CreateProperty() {
 
   return (
     <ScrollView style={styles.container}>
-      <Text style={styles.title}>Create Property Listing</Text>
-      {step === 1 ? renderStep1() : renderStep2()}
+      
+      <View style={styles.card}>
+        {step === 1 ? renderStep1() : renderStep2()}
+      </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    paddingTop: 50,
     padding: 20,
-    backgroundColor: '#fff',
+    backgroundColor: '#f9f9f9',
+    flex: 1,
   },
-  title: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    marginBottom: 15,
+  
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 3,
   },
   label: {
     marginTop: 10,
     fontWeight: '600',
+    color: '#34495e',
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ccc',
+    borderColor: '#dfe6e9',
     padding: 10,
-    borderRadius: 5,
+    borderRadius: 8,
     marginTop: 5,
+    backgroundColor: '#fff',
   },
   button: {
     marginTop: 20,
     backgroundColor: '#3498db',
-    padding: 12,
-    borderRadius: 5,
+    paddingVertical: 14,
+    borderRadius: 10,
     alignItems: 'center',
+    shadowColor: '#2980b9',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
   },
   buttonText: {
     color: '#fff',
     fontWeight: 'bold',
+    fontSize: 16,
   },
   secondaryButton: {
-    marginTop: 10,
-    backgroundColor: '#7f8c8d',
-    padding: 12,
-    borderRadius: 5,
+    marginTop: 15,
+    backgroundColor: '#bdc3c7',
+    paddingVertical: 12,
+    borderRadius: 10,
     alignItems: 'center',
   },
   secondaryText: {
-    color: '#fff',
+    color: '#2c3e50',
     fontWeight: 'bold',
+    fontSize: 15,
   },
   map: {
     width: '100%',
     height: 300,
-    marginVertical: 20,
+    marginTop: 10,
+    borderRadius: 10,
   },
   imagePreview: {
     width: 100,
     height: 100,
     marginRight: 10,
-    borderRadius: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#ccc',
   },
 });

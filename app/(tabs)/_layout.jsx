@@ -43,7 +43,7 @@ export default function TabLayout() {
       />
 
 <Tabs.Screen
-        name="create"
+        name="Maps"
         options={{
           title: 'Nearby',
           tabBarIcon: ({ color, focused }) => (

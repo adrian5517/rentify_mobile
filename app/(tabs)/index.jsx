@@ -1,12 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, ScrollView, StyleSheet, Image, TextInput, TouchableOpacity, Modal, StatusBar as RNStatusBar } from 'react-native';
+import {
+  View, Text, ScrollView, StyleSheet, Image, TextInput,
+  TouchableOpacity, Modal, StatusBar as RNStatusBar
+} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import COLORS from '../../constant/colors';
 import Fuse from 'fuse.js';
 import MapView, { Marker } from 'react-native-maps';
-import House from '../../assets/images/houseView.png';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { router } from 'expo-router';
 
 export default function Home() {
   const [username, setUsername] = useState('Guest');
@@ -31,11 +34,7 @@ export default function Home() {
       const storedUsername = await AsyncStorage.getItem('username');
       const storedProfilePicture = await AsyncStorage.getItem('profilePicture');
       setUsername(storedUsername || 'Guest');
-      setProfilePicture(
-        storedProfilePicture && storedProfilePicture.startsWith('http')
-          ? storedProfilePicture
-          : 'https://example.com/default-profile.png'
-      );
+      setProfilePicture(storedProfilePicture?.startsWith('http') ? storedProfilePicture : 'https://example.com/default-profile.png');
     } catch (error) {
       console.error('Error loading user details:', error);
     }
@@ -45,7 +44,7 @@ export default function Home() {
     try {
       const response = await fetch('https://rentify-server-ge0f.onrender.com/api/properties');
       const json = await response.json();
-      if (json && Array.isArray(json)) {
+      if (Array.isArray(json)) {
         setProperties(json);
         setFilteredProperties(json);
       }
@@ -54,7 +53,6 @@ export default function Home() {
     }
   };
 
-  // Auto-refresh when Home screen is focused
   useFocusEffect(
     useCallback(() => {
       loadUserDetails();
@@ -64,21 +62,13 @@ export default function Home() {
 
   useEffect(() => {
     let filtered = properties;
-
     if (selectedCategory !== 'All') {
-      filtered = filtered.filter(
-        (property) =>
-          property.propertyType &&
-          property.propertyType.toLowerCase() === selectedCategory.toLowerCase()
-      );
+      filtered = filtered.filter(p => p.propertyType?.toLowerCase() === selectedCategory.toLowerCase());
     }
-
     if (searchQuery.trim() !== '') {
       const fuse = new Fuse(filtered, fuseOptions);
-      const results = fuse.search(searchQuery);
-      filtered = results.map(result => result.item);
+      filtered = fuse.search(searchQuery).map(r => r.item);
     }
-
     setFilteredProperties(filtered);
   }, [searchQuery, selectedCategory, properties]);
 
@@ -96,6 +86,12 @@ export default function Home() {
 
   const handleCreatePress = () => {
     navigation.navigate('CreateProperty');
+  };
+
+  const getImageUri = (property) => {
+    if (property?.images?.length > 0) return `https://rentify-server-ge0f.onrender.com${property.images[0]}`;
+    if (property?.image) return `https://rentify-server-ge0f.onrender.com${property.image}`;
+    return 'https://picsum.photos/200/300';
   };
 
   return (
@@ -117,7 +113,7 @@ export default function Home() {
 
       {/* Top Buttons */}
       <View style={styles.buttonContainer}>
-        <TouchableOpacity style={styles.button}>
+        <TouchableOpacity style={styles.button} onPress={() => router.push('/(tabs)/Maps')}>
           <Ionicons name="location-sharp" size={24} color="white" />
           <Text style={styles.buttonText}>Nearby</Text>
         </TouchableOpacity>
@@ -148,15 +144,13 @@ export default function Home() {
       {/* Categories */}
       <View style={styles.categoryWrapper}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {categories.map((category) => (
+          {categories.map(category => (
             <TouchableOpacity
               key={category}
               onPress={() => setSelectedCategory(category)}
               style={[styles.categoryButton, selectedCategory === category && styles.categoryButtonActive]}
             >
-              <Text
-                style={[styles.categoryText, selectedCategory === category && styles.categoryTextActive]}
-              >
+              <Text style={[styles.categoryText, selectedCategory === category && styles.categoryTextActive]}>
                 {category}
               </Text>
             </TouchableOpacity>
@@ -166,116 +160,94 @@ export default function Home() {
 
       {/* Properties */}
       <ScrollView contentContainerStyle={{ ...styles.scrollContent, paddingBottom: 100 }}>
-  <View style={styles.filteredDataContainer}>
-    {filteredProperties.length > 0 ? (
-      filteredProperties.map((property, index) => {
-        // Get the first image from the array (if available)
-        const firstImage = property.images && property.images.length > 0
-          ? `https://rentify-server-ge0f.onrender.com${property.images[0]}`
-          : property.image
-            ? `https://rentify-server-ge0f.onrender.com${property.image}`
-            : 'https://picsum.photos/200/300'; // Fallback image if no images are available
-
-        const location = property.location?.address || 'Location not available';
-
-        return (
-          <View key={property._id || index} style={styles.propertyCard}>
-            {/* Display the first image or fallback */}
-            <Image
-              source={{ uri: firstImage }}
-              style={styles.propertyImage}
-              onError={() => console.log('Image failed to load')}
-            />
-            <Text style={styles.propertyName}>{property.name}</Text>
-            <Text style={styles.propertyPrice}>₱{property.price}</Text>
-            <Text style={styles.propertyLocation}>{location}</Text>
-            <Text style={styles.propertyDescription}>{property.description}</Text>
-
-            <TouchableOpacity
-              style={styles.propertyButton}
-              onPress={() => handlePropertyPress(property)}
-            >
-              <Text style={styles.propertyButtonText}>View Details</Text>
-            </TouchableOpacity>
-          </View>
-        );
-      })
-    ) : (
-      <Text style={styles.noResultsText}>No properties found</Text>
-    )}
-  </View>
-</ScrollView>
-
-{/* Modal */}
-{selectedProperty && (
-  <Modal
-    animationType="slide"
-    transparent={true}
-    visible={modalVisible}
-    onRequestClose={handleCloseModal}
-  >
-    <View style={styles.modalContainer}>
-      <ScrollView contentContainerStyle={styles.modalContent}>
-        <TouchableOpacity style={styles.closeButton} onPress={handleCloseModal}>
-          <Ionicons name="close" size={24} color={COLORS.primary} />
-        </TouchableOpacity>
-        
-        {/* Handle image loading in modal with fallback */}
-        <Image
-          source={{
-            uri: selectedProperty.image
-              ? `https://rentify-server-ge0f.onrender.com${selectedProperty.image}`
-              : 'https://picsum.photos/200/300', // Fallback image
-          }}
-          style={styles.modalImage}
-          onError={() => console.log('Image failed to load in modal')}
-        />
-        
-        <Text style={styles.modalName}>{selectedProperty.name}</Text>
-        <Text style={styles.modalDescription}>{selectedProperty.description}</Text>
-        <Text style={styles.modalLocation}>Location: {selectedProperty.location?.address || 'N/A'}</Text>
-        <Text style={styles.modalPrice}>₱{selectedProperty.price}</Text>
-        <Text style={styles.modalStatus}>Status: {selectedProperty.status}</Text>
-        <Text style={styles.modalPostedBy}>Posted by: {selectedProperty.postedBy}</Text>
-        <Text style={styles.modalAmenities}>Amenities: {selectedProperty.amenities.join(', ')}</Text>
-
-        <View style={styles.modalButtons}>
-          <TouchableOpacity style={styles.contactButton}>
-            <Text style={styles.contactButtonText}>Contact</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.contactButton}>
-            <Text style={styles.contactButtonText}>Rent</Text>
-          </TouchableOpacity>
+        <View style={styles.filteredDataContainer}>
+          {filteredProperties.length > 0 ? (
+            filteredProperties.map((property, index) => (
+              <View key={property._id || index} style={styles.propertyCard}>
+                <Image
+                  source={{ uri: getImageUri(property) }}
+                  style={styles.propertyImage}
+                  onError={(e) => {
+                    console.warn('Image failed to load:', e.nativeEvent.error);
+                  }}
+                />
+                <View style={styles.namePriceRow}>
+                  <Text style={styles.propertyName}>{property.name}</Text>
+                  <Text style={styles.propertyPrice}>₱{property.price} /month</Text>
+                </View>
+                <Text style={styles.propertyLocation}>{property.location?.address || 'Location not available'}</Text>
+                <Text style={styles.propertyDescription}>{property.description}</Text>
+                <TouchableOpacity style={styles.propertyButton} onPress={() => handlePropertyPress(property)}>
+                  <Text style={styles.propertyButtonText}>View Details</Text>
+                </TouchableOpacity>
+              </View>
+            ))
+          ) : (
+            <Text style={styles.noResultsText}>No properties found</Text>
+          )}
         </View>
-
-        {/* Check for location and render map if available */}
-        {selectedProperty.location?.latitude && selectedProperty.location?.longitude && (
-          <MapView
-            style={styles.map}
-            initialRegion={{
-              latitude: selectedProperty.location.latitude,
-              longitude: selectedProperty.location.longitude,
-              latitudeDelta: 0.005,
-              longitudeDelta: 0.005,
-            }}
-          >
-            <Marker
-              coordinate={{
-                latitude: selectedProperty.location.latitude,
-                longitude: selectedProperty.location.longitude,
-              }}
-              title={selectedProperty.name}
-            />
-          </MapView>
-        )}
       </ScrollView>
-    </View>
-  </Modal>
-)}
 
-                    </View>
-                    );
-                    }
+      {/* Modal */}
+      {selectedProperty && (
+        <Modal animationType="slide" transparent visible={modalVisible} onRequestClose={handleCloseModal}>
+          <View style={styles.modalContainer}>
+            <ScrollView contentContainerStyle={styles.modalContent}>
+              <TouchableOpacity style={styles.closeButton} onPress={handleCloseModal}>
+                <Ionicons name="close" size={24} color={COLORS.primary} />
+              </TouchableOpacity>
+
+              <Image
+                source={{ uri: getImageUri(selectedProperty) }}
+                style={styles.modalImage}
+                onError={() => console.log('Image failed to load in modal')}
+              />
+
+              <Text style={styles.modalName}>{selectedProperty.name}</Text>
+              <Text style={styles.modalDescription}>Description: {selectedProperty.description}</Text>
+              <Text style={styles.modalLocation}>Location: {selectedProperty.location?.address || 'N/A'}</Text>
+              <Text style={styles.modalPrice}>₱{selectedProperty.price}</Text>
+              <Text style={styles.modalStatus}>Status: {selectedProperty.status}</Text>
+              <Text style={styles.modalPostedBy}>Posted by: {selectedProperty.postedBy}</Text>
+              <Text style={styles.modalAmenities}>
+                Amenities: {Array.isArray(selectedProperty.amenities) ? selectedProperty.amenities.join(', ') : 'N/A'}
+              </Text>
+
+              <View style={styles.modalButtons}>
+                <TouchableOpacity style={styles.contactButton}>
+                  <Text style={styles.contactButtonText}>Contact</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.contactButton}>
+                  <Text style={styles.contactButtonText}>Rent</Text>
+                </TouchableOpacity>
+              </View>
+
+              {selectedProperty.location?.latitude && selectedProperty.location?.longitude && (
+                <MapView
+                  style={styles.map}
+                  initialRegion={{
+                    latitude: selectedProperty.location.latitude,
+                    longitude: selectedProperty.location.longitude,
+                    latitudeDelta: 0.005,
+                    longitudeDelta: 0.005,
+                  }}
+                >
+                  <Marker
+                    coordinate={{
+                      latitude: selectedProperty.location.latitude,
+                      longitude: selectedProperty.location.longitude,
+                    }}
+                    title={selectedProperty.name}
+                  />
+                </MapView>
+              )}
+            </ScrollView>
+          </View>
+        </Modal>
+      )}
+    </View>
+  );
+}
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.white },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', position: 'absolute', top: 15, left: 0, right: 0, padding: 15, backgroundColor: 'white', zIndex: 10 },
@@ -295,9 +267,16 @@ const styles = StyleSheet.create({
   categoryTextActive: { color: 'white' },
   filteredDataContainer: { paddingHorizontal: 10, marginTop: 20 },
   propertyCard: { marginBottom: 20, borderRadius: 12, overflow: 'hidden', backgroundColor: 'rgba(178, 212, 255, 0.3)',margin:15, },
+  namePriceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginHorizontal: 10,
+    marginTop: 10,
+  },
   propertyImage: { width: '100%', height: 200 },
   propertyName: { fontSize: 20, fontWeight: 'bold', marginTop: 10, marginHorizontal: 10 ,color: COLORS.primary },
-  propertyPrice: { fontSize: 16, fontWeight: '600', marginHorizontal: 10 },
+  propertyPrice: { fontSize: 16, fontWeight: '600', marginHorizontal: 10 , backgroundColor: 'rgba(248, 184, 8, 0.94)', marginVertical: 5, padding: 5, borderRadius: 8 , width: 100, textAlign: 'center' },
   propertyLocation: { marginHorizontal: 10, color: 'gray' },
   propertyDescription: { marginHorizontal: 10, marginVertical: 5, color: 'gray' },
   propertyButton: { margin: 10, backgroundColor: COLORS.primary, padding: 10, borderRadius: 8 },

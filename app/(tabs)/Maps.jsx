@@ -12,7 +12,7 @@ const Person = require('../../assets/images/personView.png');
 const MAPBOX_TOKEN = 'pk.eyJ1IjoiYWRyaWFuNTUxNyIsImEiOiJjbTlyMHpubjYxcG9lMmtwdDVtc3FtaXRxIn0.6Qx1Pf_dIOCfRB7n7tWl1g';
 const directionsClient = MapboxDirections({ accessToken: MAPBOX_TOKEN });
 
-export default function Create() {
+export default function Maps() {
   const [location, setLocation] = useState(null);
   const [properties, setProperties] = useState([]);
   const [routeCoords, setRouteCoords] = useState([]);
