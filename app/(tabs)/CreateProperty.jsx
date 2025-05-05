@@ -211,6 +211,7 @@ export default function CreateProperty() {
         value={property.status}
         onChangeText={text => setProperty(prev => ({ ...prev, status: text }))}
         placeholder="e.g. For Sale, For Rent"
+        placeholderTextColor="#999"
       />
 
       <Text style={styles.label}>Amenities (comma-separated):</Text>
@@ -219,6 +220,7 @@ export default function CreateProperty() {
         value={property.amenities}
         onChangeText={text => setProperty(prev => ({ ...prev, amenities: text }))}
         placeholder="e.g. Pool, Gym, Parking"
+        placeholderTextColor="#999"
       />
 
       <TouchableOpacity style={styles.button} onPress={() => setStep(2)}>

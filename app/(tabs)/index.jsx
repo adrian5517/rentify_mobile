@@ -89,9 +89,16 @@ export default function Home() {
   };
 
   const getImageUri = (property) => {
-    if (property?.images?.length > 0) return `https://rentify-server-ge0f.onrender.com${property.images[0]}`;
-    if (property?.image) return `https://rentify-server-ge0f.onrender.com${property.image}`;
-    return 'https://picsum.photos/200/300';
+    if (property?.images?.length > 0) {
+      const imagePath = property.images[0];
+      if (imagePath.startsWith('http')) {
+        return imagePath; // Cloudinary or direct URL
+      } else {
+        // Ensure leading slash for server-hosted images
+        return `https://rentify-server-ge0f.onrender.com${imagePath.startsWith('/') ? imagePath : `/${imagePath}`}`;
+      }
+    }
+    return 'https://picsum.photos/200/300'; // Default fallback
   };
 
   return (
