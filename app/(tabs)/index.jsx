@@ -10,6 +10,7 @@ import Fuse from 'fuse.js';
 import MapView, { Marker } from 'react-native-maps';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { router } from 'expo-router';
+import { Dimensions } from 'react-native';
 
 export default function Home() {
   const [username, setUsername] = useState('Guest');
@@ -21,6 +22,7 @@ export default function Home() {
   const [selectedProperty, setSelectedProperty] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
   const navigation = useNavigation();
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
   const categories = ['All', 'Apartment', 'Condo', 'House', 'Dorm'];
 
@@ -82,6 +84,7 @@ export default function Home() {
   const handleCloseModal = () => {
     setModalVisible(false);
     setSelectedProperty(null);
+    setCurrentImageIndex(0);
   };
 
   const handleCreatePress = () => {
@@ -92,20 +95,18 @@ export default function Home() {
     if (property?.images?.length > 0) {
       const imagePath = property.images[0];
       if (imagePath.startsWith('http')) {
-        return imagePath; // Cloudinary or direct URL
+        return imagePath;
       } else {
-        // Ensure leading slash for server-hosted images
         return `https://rentify-server-ge0f.onrender.com${imagePath.startsWith('/') ? imagePath : `/${imagePath}`}`;
       }
     }
-    return 'https://picsum.photos/200/300'; // Default fallback
+    return 'https://picsum.photos/200/300';
   };
 
   return (
     <View style={[styles.container, { paddingTop: statusBarHeight }]}>
       <RNStatusBar barStyle="dark-content" backgroundColor={COLORS.white} />
 
-      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.welcomeText}>Welcome "{username}" 👋</Text>
         <View style={styles.headerRight}>
@@ -118,7 +119,6 @@ export default function Home() {
         </View>
       </View>
 
-      {/* Top Buttons */}
       <View style={styles.buttonContainer}>
         <TouchableOpacity style={styles.button} onPress={() => router.push('/(tabs)/Maps')}>
           <Ionicons name="location-sharp" size={24} color="white" />
@@ -134,7 +134,6 @@ export default function Home() {
         </TouchableOpacity>
       </View>
 
-      {/* Search */}
       <View style={styles.searchContainer}>
         <TextInput
           style={styles.searchInput}
@@ -148,7 +147,6 @@ export default function Home() {
         </TouchableOpacity>
       </View>
 
-      {/* Categories */}
       <View style={styles.categoryWrapper}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           {categories.map(category => (
@@ -165,7 +163,6 @@ export default function Home() {
         </ScrollView>
       </View>
 
-      {/* Properties */}
       <ScrollView contentContainerStyle={{ ...styles.scrollContent, paddingBottom: 100 }}>
         <View style={styles.filteredDataContainer}>
           {filteredProperties.length > 0 ? (
@@ -174,9 +171,6 @@ export default function Home() {
                 <Image
                   source={{ uri: getImageUri(property) }}
                   style={styles.propertyImage}
-                  onError={(e) => {
-                    console.warn('Image failed to load:', e.nativeEvent.error);
-                  }}
                 />
                 <View style={styles.namePriceRow}>
                   <Text style={styles.propertyName}>{property.name}</Text>
@@ -195,7 +189,6 @@ export default function Home() {
         </View>
       </ScrollView>
 
-      {/* Modal */}
       {selectedProperty && (
         <Modal animationType="slide" transparent visible={modalVisible} onRequestClose={handleCloseModal}>
           <View style={styles.modalContainer}>
@@ -204,11 +197,42 @@ export default function Home() {
                 <Ionicons name="close" size={24} color={COLORS.primary} />
               </TouchableOpacity>
 
-              <Image
-                source={{ uri: getImageUri(selectedProperty) }}
-                style={styles.modalImage}
-                onError={() => console.log('Image failed to load in modal')}
-              />
+              <View style={styles.carouselWrapper}>
+                <ScrollView
+                  horizontal
+                  pagingEnabled
+                  showsHorizontalScrollIndicator={false}
+                  onScroll={e => {
+                    const index = Math.round(
+                      e.nativeEvent.contentOffset.x / Dimensions.get('window').width
+                    );
+                    setCurrentImageIndex(index);
+                  }}
+                  scrollEventThrottle={16}
+                >
+                  {selectedProperty.images?.map((img, idx) => (
+                    <Image
+                      key={idx}
+                      source={{ uri: img }}
+                      style={styles.modalImage}
+                      resizeMode="cover"
+                    />
+                  ))}
+                </ScrollView>
+
+                {/* Dot Indicator */}
+                <View style={styles.dotContainer}>
+                  {selectedProperty.images?.map((_, idx) => (
+                    <View
+                      key={idx}
+                      style={[
+                        styles.dot,
+                        currentImageIndex === idx && styles.activeDot,
+                      ]}
+                    />
+                  ))}
+                </View>
+              </View>
 
               <Text style={styles.modalName}>{selectedProperty.name}</Text>
               <Text style={styles.modalDescription}>Description: {selectedProperty.description}</Text>
@@ -282,7 +306,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   propertyImage: { width: '100%', height: 200 },
-  propertyName: { fontSize: 20, fontWeight: 'bold', marginTop: 10, marginHorizontal: 10 ,color: COLORS.primary },
+  propertyName: { fontSize: 20, fontWeight: 'bold', marginTop: 10,color: COLORS.primary , padding:5},
   propertyPrice: { fontSize: 16, fontWeight: '600', marginHorizontal: 10 , backgroundColor: 'rgba(248, 184, 8, 0.94)', marginVertical: 5, padding: 5, borderRadius: 8 , width: 100, textAlign: 'center' },
   propertyLocation: { marginHorizontal: 10, color: 'gray' },
   propertyDescription: { marginHorizontal: 10, marginVertical: 5, color: 'gray' },
@@ -304,4 +328,37 @@ const styles = StyleSheet.create({
   contactButton: { backgroundColor: COLORS.primary, flex: 1, marginHorizontal: 5, padding: 10, borderRadius: 8 },
   contactButtonText: { color: 'white', textAlign: 'center', fontWeight: 'bold' },
   map: { width: '100%', height: 250, marginTop: 20, borderRadius: 10 },
+  carouselWrapper: {
+    width: '100%',
+    height: 250,
+    alignItems: 'center',
+  },
+  
+  modalImage: {
+    width: Dimensions.get('window').width,
+    height: 250,
+    resizeMode: 'cover',
+    
+  },
+  
+  dotContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#ccc',
+    marginHorizontal: 4,
+  },
+  
+  activeDot: {
+    backgroundColor: COLORS.primary,
+    width: 10,
+    height: 10,
+  },
 });
