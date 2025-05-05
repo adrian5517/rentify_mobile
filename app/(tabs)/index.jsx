@@ -235,14 +235,15 @@ export default function Home() {
               </View>
 
               <Text style={styles.modalName}>{selectedProperty.name}</Text>
-              <Text style={styles.modalDescription}>Description: {selectedProperty.description}</Text>
+              
               <Text style={styles.modalLocation}>Location: {selectedProperty.location?.address || 'N/A'}</Text>
               <Text style={styles.modalPrice}>₱{selectedProperty.price}</Text>
               <Text style={styles.modalStatus}>Status: {selectedProperty.status}</Text>
-              <Text style={styles.modalPostedBy}>Posted by: {selectedProperty.postedBy}</Text>
               <Text style={styles.modalAmenities}>
                 Amenities: {Array.isArray(selectedProperty.amenities) ? selectedProperty.amenities.join(', ') : 'N/A'}
               </Text>
+              <Text style={styles.modalDescription}>Description: {selectedProperty.description}</Text>
+              
 
               <View style={styles.modalButtons}>
                 <TouchableOpacity style={styles.contactButton}>
@@ -268,7 +269,7 @@ export default function Home() {
                       latitude: selectedProperty.location.latitude,
                       longitude: selectedProperty.location.longitude,
                     }}
-                    title={selectedProperty.name}
+                    title= {selectedProperty.location.address}
                   />
                 </MapView>
               )}
@@ -314,7 +315,7 @@ const styles = StyleSheet.create({
   propertyButtonText: { color: 'white', fontWeight: 'bold', textAlign: 'center' },
   noResultsText: { textAlign: 'center', marginTop: 20, color: 'gray' },
   modalContainer: { flex: 1, justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.5)', paddingTop: 30 },
-  modalContent: { backgroundColor: 'white', margin: 20, borderRadius: 10, padding: 15 },
+  modalContent: { backgroundColor: 'white', margin: 10, borderRadius: 10, padding: 15 },
   closeButton: { alignSelf: 'flex-end' },
   modalImage: { width: '100%', height: 200, borderRadius: 10 },
   modalName: { fontSize: 24, fontWeight: 'bold', marginTop: 10 },

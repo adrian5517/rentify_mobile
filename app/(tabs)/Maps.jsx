@@ -6,7 +6,7 @@ import MapboxDirections from '@mapbox/mapbox-sdk/services/directions';
 import { BlurView } from 'expo-blur';
 
 // Use require for consistent asset loading
-const House = require('../../assets/images/houseView.png');
+
 const Person = require('../../assets/images/personView.png');
 
 const MAPBOX_TOKEN = 'pk.eyJ1IjoiYWRyaWFuNTUxNyIsImEiOiJjbTlyMHpubjYxcG9lMmtwdDVtc3FtaXRxIn0.6Qx1Pf_dIOCfRB7n7tWl1g';
@@ -128,8 +128,8 @@ export default function Maps() {
               }}
               title={property.name}
               description={`🏠 ${property.price}\n💵 ${property.propertyType}\n📍 ${property.location.address}`}
-              pinColor="green"
-              image={House}
+              pinColor="yellow"
+              
               onPress={() => setSelectedProperty(property)}
             />
           )
@@ -144,7 +144,7 @@ export default function Maps() {
         <BlurView intensity={50} tint="light" style={styles.infoBox}>
           <Text style={styles.infoText}>
             Distance to {selectedProperty.name}: {distance.toFixed(2)} km | ETA: {duration.toFixed(1)} mins {'\n'}
-            ₱{selectedProperty.price}
+            ₱{selectedProperty.price} | {selectedProperty.propertyType} | {selectedProperty.location.address}
           </Text>
         </BlurView>
       )}
@@ -177,7 +177,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.4)',
   },
   infoText: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: 'bold',
     color: 'white',
   },
