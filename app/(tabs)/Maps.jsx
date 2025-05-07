@@ -168,12 +168,28 @@ export default function Maps() {
     fetchDirections();
   }, [selectedProperty, location, refresh]);
 
-  // Cluster names for display
-  const clusterNames = ['Low Budget', 'Mid Range', 'High End'];
-  const clusterColors = ['#4CAF50', '#FFC107', '#E91E63'];
+  // Dynamically map cluster indices to correct labels/colors by average price
+  const staticLabels = ['Low Budget', 'Mid Range', 'High End'];
+  const staticColors = ['#4CAF50', '#FFC107', '#E91E63'];
 
-  // Filtered properties by selected cluster from ML API
-  const filteredProperties = mlProperties.filter(p => p.cluster === selectedCluster);
+  // Compute average price for each cluster
+  const clusterStats = [];
+  for (let i = 0; i < 3; i++) {
+    const props = mlProperties.filter(p => p.cluster === i);
+    const avg = props.length ? props.reduce((sum, p) => sum + (p.price || 0), 0) / props.length : 0;
+    clusterStats.push({ idx: i, avg, count: props.length });
+  }
+  // Sort clusters by average price ascending
+  const sorted = [...clusterStats].sort((a, b) => a.avg - b.avg);
+  // Map: clusterMap[buttonIdx] = clusterIndex
+  const clusterMap = sorted.map(x => x.idx);
+
+  // For rendering: labels/colors are always [low, mid, high] regardless of backend order
+  const clusterNames = staticLabels;
+  const clusterColors = staticColors;
+
+  // selectedCluster is the button index (0/1/2), map to real cluster index
+  const filteredProperties = mlProperties.filter(p => p.cluster === clusterMap[selectedCluster]);
 
   // Debug logs
   // console.log('mlProperties:', mlProperties);

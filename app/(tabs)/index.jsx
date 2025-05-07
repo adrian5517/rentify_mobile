@@ -257,7 +257,7 @@ if (profilePicture.includes('api.dicebear.com') && profilePicture.includes('/svg
             <Ionicons name="bulb-outline" size={18} color="#fff" style={{ marginRight: 5 }} />
           )}
           <Text style={styles.recommendButtonTextModern}>
-            {loadingML ? 'Loading...' : (showML ? 'Recommended' : 'AI Suggest')}
+            {loadingML ? 'Loading...' : (showML ? 'Recommended' : 'Suggestion')}
           </Text>
         </TouchableOpacity>
       </View>
