@@ -81,72 +81,70 @@ export default function Login() {
                 onChangeText={setEmail}
                 keyboardType='email-address'
                 autoCapitalize='none'
+                selectionColor={COLORS.primary}
+                underlineColorAndroid="transparent"
               />
             </View>
           </View>
 
-          {/* Password */}
           <View style={styles.inputGroup}>
-         <Text style={styles.label}>Password</Text>
-         <View style={styles.inputContainer}>
-            {/* LEFT-ICON */}
-            <Ionicons
-            name="lock-closed-outline"
-            size={20}
-            color={COLORS.primary}
-            style={styles.inputIcon}
-            />
-            {/* Input */}
-            <TextInput
-            style={styles.input}
-            placeholder='Enter your password'
-            placeholderTextColor={COLORS.placeholderText}
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry={!showPassword}
-            />
-
-            <TouchableOpacity 
-              onPress={()=> setShowPassword(!showPassword)}
-              style={styles.eyeIcon}>
-
+            <Text style={styles.label}>Password</Text>
+            <View style={styles.inputContainer}>
+              <Ionicons
+                name="lock-closed-outline"
+                size={20}
+                color={COLORS.primary}
+                style={styles.inputIcon}
+              />
+              <TextInput
+                style={styles.input}
+                placeholder='Enter your password'
+                placeholderTextColor={COLORS.placeholderText}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+                selectionColor={COLORS.primary}
+                underlineColorAndroid="transparent"
+              />
+              <TouchableOpacity 
+                onPress={()=> setShowPassword(!showPassword)}
+                style={styles.eyeIcon}
+              >
                 <Ionicons
-                  name={showPassword ? "eye-outline" :"eye-off-outline" }
+                  name={showPassword ? "eye-outline" : "eye-off-outline"}
                   size={20}
                   color={COLORS.primary}
                 />
-            </TouchableOpacity>
+              </TouchableOpacity>
+            </View>
+          </View>
 
-         </View>
-      </View>
-         
-         <TouchableOpacity style={styles.button} onPress={handleLogin}
-         disabled={isLoading}>
+          <TouchableOpacity
+            style={[styles.button, isLoading && { backgroundColor: COLORS.accent + '99' }]}
+            onPress={handleLogin}
+            activeOpacity={0.85}
+            disabled={isLoading}
+          >
             {isLoading ? (
-                <ActivityIndicator color='#fff'/>
+              <ActivityIndicator color='#fff'/>
             ) : (
-                <Text style={styles.buttonText}>Login</Text>
+              <Text style={styles.buttonText}>Login</Text>
             )}
+          </TouchableOpacity>
 
-         </TouchableOpacity>
-         
-         {/* Footer */}
-         <View style={styles.footer}>
+          {/* Footer */}
+          <View style={styles.footer}>
             <Text style={styles.footerText}>Don't have an account?</Text>
             <Link href="/signup" asChild>
-            <TouchableOpacity>
+              <TouchableOpacity>
                 <Text style={styles.link}>Signup</Text>
-            </TouchableOpacity>
+              </TouchableOpacity>
             </Link>
-
-         </View>
-
+          </View>
         </View>
       </View>
     </View>
     </KeyboardAvoidingView>
-    
-   
-   
   );
 }
+

@@ -61,7 +61,8 @@ if (profilePicture.includes('api.dicebear.com') && profilePicture.includes('/svg
   const [maxPrice, setMaxPrice] = useState('');
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const navigation = useNavigation();
-  const [algo, setAlgo] = useState('knn'); // 'knn' or 'kmeans'
+  // Always use KNN for recommendations
+  const algo = 'knn';
   const [loadingML, setLoadingML] = useState(false);
   
 
@@ -183,23 +184,6 @@ if (profilePicture.includes('api.dicebear.com') && profilePicture.includes('/svg
         </TouchableOpacity>
       </View>
 
-      {/* Algorithm Selection Chips */}
-      <View style={styles.chipRow}>
-        <TouchableOpacity
-          style={[styles.chip, algo === 'knn' && styles.chipActive]}
-          onPress={() => setAlgo('knn')}
-          accessibilityLabel="Select KNN recommendation algorithm"
-        >
-          <Text style={[styles.chipText, algo === 'knn' && styles.chipTextActive]}>KNN</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.chip, algo === 'kmeans' && styles.chipActive]}
-          onPress={() => setAlgo('kmeans')}
-          accessibilityLabel="Select KMeans recommendation algorithm"
-        >
-          <Text style={[styles.chipText, algo === 'kmeans' && styles.chipTextActive]}>KMeans</Text>
-        </TouchableOpacity>
-      </View>
 
       {/* Modern Search Bar with Location Picker */}
       {/* Modern Search Bar with Location Picker */}
@@ -257,7 +241,7 @@ if (profilePicture.includes('api.dicebear.com') && profilePicture.includes('/svg
             <Ionicons name="bulb-outline" size={18} color="#fff" style={{ marginRight: 5 }} />
           )}
           <Text style={styles.recommendButtonTextModern}>
-            {loadingML ? 'Loading...' : (showML ? 'Recommended' : 'Suggestion')}
+            {loadingML ? 'Loading...' : (showML ? 'Recommended' : 'Suggest')}
           </Text>
         </TouchableOpacity>
       </View>

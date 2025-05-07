@@ -407,6 +407,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
+    alignSelf: 'center',
     elevation: 2,
     zIndex: 30,
   },

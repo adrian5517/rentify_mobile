@@ -34,19 +34,18 @@
   
   // Rentify Catchy 3-Color Palette
   const COLORS = {
-    primary: "#7B61FF",        // Vibrant Purple (main brand color)
-    accent: "#FF6F61",         // Coral (for highlights, buttons, icons)
-    secondary: "#00C6AE",      // Modern Teal (for secondary actions, backgrounds)
-    background: "#FAFAFF",     // Soft Off-white
-    cardBackground: "#FFFFFF", // White for cards
-    inputBackground: "#F4F4FB",// Light grayish for inputs
-    border: "#E3E1EF",         // Soft border
-    text: "#232323",           // Deep gray for text
-    textSecondary: "#7B61FF",  // Use primary for accent text
-    placeholderText: "#B6B6C5",// Muted placeholder
-    white: "#FFFFFF",
-    black: "#000000",
-  };
+  primary: "#7B61FF",        // Main brand color
+  secondary: "#00C6AE",     // Secondary accent color
+  background: "#FAFAFF",    // Soft background
+  cardBackground: "#FFFFFF", // Card background
+  inputBackground: "#F4F4FB",// Input background
+  border: "#E3E1EF",        // Border
+  text: "#232323",           // Main text
+  textSecondary: "#00C6AE",  // Use secondary for accent text
+  placeholderText: "#B6B6C5",// Placeholder
+  white: "#FFFFFF",
+  black: "#000000",
+};
   
   
   
