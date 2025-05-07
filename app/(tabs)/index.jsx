@@ -3,7 +3,7 @@ import {
   View, Text, ScrollView, StyleSheet, Image, TextInput,
   TouchableOpacity, Modal, StatusBar, Dimensions
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuthStore } from '../../store/authStore';
 import { Ionicons } from '@expo/vector-icons';
 import COLORS from '../../constant/colors';
 import Fuse from 'fuse.js';
@@ -42,8 +42,13 @@ export default function Home() {
     })
   ).current;
 
-  const [username, setUsername] = useState('Guest');
-  const [profilePicture, setProfilePicture] = useState('https://example.com/default-profile.png');
+  const user = useAuthStore(state => state.user);
+  // Ensure Dicebear SVG URLs are converted to PNG for React Native compatibility
+let profilePicture = user?.profilePicture || 'https://example.com/default-profile.png';
+if (profilePicture.includes('api.dicebear.com') && profilePicture.includes('/svg?')) {
+  profilePicture = profilePicture.replace('/svg?', '/png?');
+}
+  const username = user?.username || 'Guest';
   const [searchQuery, setSearchQuery] = useState('');
   const [properties, setProperties] = useState([]);
   const [filteredProperties, setFilteredProperties] = useState([]);
@@ -65,13 +70,6 @@ export default function Home() {
   const fuseOptions = {
     keys: ['name', 'description', 'location.address', 'postedBy', 'amenities'],
     threshold: 0.3,
-  };
-
-  const loadUserDetails = async () => {
-    const storedUsername = await AsyncStorage.getItem('username');
-    const storedProfilePicture = await AsyncStorage.getItem('profilePicture');
-    setUsername(storedUsername || 'Guest');
-    setProfilePicture(storedProfilePicture?.startsWith('http') ? storedProfilePicture : 'https://example.com/default-profile.png');
   };
 
   const fetchProperties = async () => {
@@ -107,7 +105,6 @@ export default function Home() {
   };
 
   useFocusEffect(useCallback(() => {
-    loadUserDetails();
     fetchProperties();
   }, []));
 
@@ -181,7 +178,7 @@ export default function Home() {
           <Text style={styles.airbnbTitle}>Rentify</Text>
           <Text style={styles.airbnbSubtitle}>Find your next stay</Text>
         </View>
-        <TouchableOpacity onPress={() => navigation.navigate('Profile')}>
+        <TouchableOpacity onPress={() => navigation.navigate('profile')}>
           <Image source={{ uri: profilePicture }} style={styles.profileImageLarge} />
         </TouchableOpacity>
       </View>
@@ -445,6 +442,7 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     borderWidth: 2,
     borderColor: '#fff',
+    backgroundColor: COLORS.secondary,
   },
   searchBarWrapper: {
     flexDirection: 'row',

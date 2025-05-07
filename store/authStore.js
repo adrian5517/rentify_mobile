@@ -13,7 +13,7 @@ const safeSetItem = async (key, value) => {
 export const useAuthStore = create((set) => ({
   user: null,
   token: null,
-  profileProfile: null,
+  profilePicture: null,
   isLoading: false,
 
   setUser: (user) => set({ user }),

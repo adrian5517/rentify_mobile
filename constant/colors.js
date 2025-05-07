@@ -32,10 +32,11 @@
   
   // Rentify Color Palette
   
+  // Rentify Catchy 3-Color Palette
   const COLORS = {
-    primary: "#7B61FF",        // Vibrant Purple
-    accent: "#FF6F61",         // Coral Accent
-    secondary: "#00C6AE",      // Modern Teal
+    primary: "#7B61FF",        // Vibrant Purple (main brand color)
+    accent: "#FF6F61",         // Coral (for highlights, buttons, icons)
+    secondary: "#00C6AE",      // Modern Teal (for secondary actions, backgrounds)
     background: "#FAFAFF",     // Soft Off-white
     cardBackground: "#FFFFFF", // White for cards
     inputBackground: "#F4F4FB",// Light grayish for inputs
