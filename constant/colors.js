@@ -33,17 +33,18 @@
   // Rentify Color Palette
   
   const COLORS = {
-    primary: "#03045E", // Deep Blue
-    textPrimary: "#0077B6", // Light Blue
-    textSecondary: "#00B4D8", // Cyan
-    textDark: "#90E0EF", // Light Cyan
-    placeholderText: "#CAF0FB", // Very Light Cyan
-    background: "#CAF0FB", // Very Light Cyan for background
-    cardBackground: "#90E0EF", // Light Cyan for card background
-    inputBackground: "#00B4D8", // Cyan for input background
-    border: "#0077B6", // Light Blue for borders
-    white: "#ffffff", // White
-    black: "#000000", // Black
+    primary: "#7B61FF",        // Vibrant Purple
+    accent: "#FF6F61",         // Coral Accent
+    secondary: "#00C6AE",      // Modern Teal
+    background: "#FAFAFF",     // Soft Off-white
+    cardBackground: "#FFFFFF", // White for cards
+    inputBackground: "#F4F4FB",// Light grayish for inputs
+    border: "#E3E1EF",         // Soft border
+    text: "#232323",           // Deep gray for text
+    textSecondary: "#7B61FF",  // Use primary for accent text
+    placeholderText: "#B6B6C5",// Muted placeholder
+    white: "#FFFFFF",
+    black: "#000000",
   };
   
   

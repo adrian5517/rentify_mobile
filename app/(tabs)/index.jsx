@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, Image, TextInput,
-  TouchableOpacity, Modal, StatusBar as RNStatusBar
+  TouchableOpacity, Modal, StatusBar, Dimensions
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,10 +9,39 @@ import COLORS from '../../constant/colors';
 import Fuse from 'fuse.js';
 import MapView, { Marker } from 'react-native-maps';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
-import { router } from 'expo-router';
-import { Dimensions } from 'react-native';
+import * as Location from 'expo-location';
+import { FlatList, PanResponder, Animated } from 'react-native';
+import { ActivityIndicator } from 'react-native';
 
 export default function Home() {
+  // For slide down to close
+  const slideAnim = React.useRef(new Animated.Value(0)).current;
+  const panResponder = React.useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (evt, gestureState) => Math.abs(gestureState.dy) > 10,
+      onPanResponderMove: (evt, gestureState) => {
+        if (gestureState.dy > 0) {
+          slideAnim.setValue(gestureState.dy);
+        }
+      },
+      onPanResponderRelease: (evt, gestureState) => {
+        if (gestureState.dy > 100) {
+          handleCloseModal();
+          Animated.timing(slideAnim, {
+            toValue: 0,
+            duration: 0,
+            useNativeDriver: true,
+          }).start();
+        } else {
+          Animated.spring(slideAnim, {
+            toValue: 0,
+            useNativeDriver: true,
+          }).start();
+        }
+      },
+    })
+  ).current;
+
   const [username, setUsername] = useState('Guest');
   const [profilePicture, setProfilePicture] = useState('https://example.com/default-profile.png');
   const [searchQuery, setSearchQuery] = useState('');
@@ -21,10 +50,17 @@ export default function Home() {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedProperty, setSelectedProperty] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
-  const navigation = useNavigation();
+  const [mlRecommended, setMlRecommended] = useState([]);
+  const [showML, setShowML] = useState(false);
+  const [minPrice, setMinPrice] = useState('');
+  const [maxPrice, setMaxPrice] = useState('');
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const navigation = useNavigation();
+  const [algo, setAlgo] = useState('knn'); // 'knn' or 'kmeans'
+  const [loadingML, setLoadingML] = useState(false);
+  
 
-  const categories = ['All', 'Apartment', 'Condo', 'House', 'Dorm'];
+  const categories = ['All', 'Apartment', 'Boarding House', 'House', 'Dorm'];
 
   const fuseOptions = {
     keys: ['name', 'description', 'location.address', 'postedBy', 'amenities'],
@@ -32,49 +68,78 @@ export default function Home() {
   };
 
   const loadUserDetails = async () => {
-    try {
-      const storedUsername = await AsyncStorage.getItem('username');
-      const storedProfilePicture = await AsyncStorage.getItem('profilePicture');
-      setUsername(storedUsername || 'Guest');
-      setProfilePicture(storedProfilePicture?.startsWith('http') ? storedProfilePicture : 'https://example.com/default-profile.png');
-    } catch (error) {
-      console.error('Error loading user details:', error);
-    }
+    const storedUsername = await AsyncStorage.getItem('username');
+    const storedProfilePicture = await AsyncStorage.getItem('profilePicture');
+    setUsername(storedUsername || 'Guest');
+    setProfilePicture(storedProfilePicture?.startsWith('http') ? storedProfilePicture : 'https://example.com/default-profile.png');
   };
 
   const fetchProperties = async () => {
-    try {
-      const response = await fetch('https://rentify-server-ge0f.onrender.com/api/properties');
-      const json = await response.json();
-      if (Array.isArray(json)) {
-        setProperties(json);
-        setFilteredProperties(json);
-      }
-    } catch (error) {
-      console.error('Error fetching properties:', error);
+    const res = await fetch('https://rentify-server-ge0f.onrender.com/api/properties');
+    const data = await res.json();
+    if (Array.isArray(data)) {
+      setProperties(data);
+      setFilteredProperties(data);
     }
   };
 
-  useFocusEffect(
-    useCallback(() => {
-      loadUserDetails();
-      fetchProperties();
-    }, [])
-  );
+  const fetchMLRecommendations = async () => {
+    setLoadingML(true);
+    let { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      setLoadingML(false);
+      return alert('Permission denied');
+    }
+    let location = await Location.getCurrentPositionAsync({});
+    // Use minPrice or maxPrice, fallback to 2000 if not set
+    let price = minPrice ? parseInt(minPrice) : (maxPrice ? parseInt(maxPrice) : 2000);
+    const res = await fetch('https://ml-rentify.onrender.com/ml', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: algo, price, ...location.coords }),
+    });
+    const data = await res.json();
+    if (Array.isArray(data)) {
+      setMlRecommended(data);
+      setShowML(true);
+    }
+    setLoadingML(false);
+  };
+
+  useFocusEffect(useCallback(() => {
+    loadUserDetails();
+    fetchProperties();
+  }, []));
 
   useEffect(() => {
-    let filtered = properties;
-    if (selectedCategory !== 'All') {
+    let filtered = [...properties];
+    if (selectedCategory !== 'All')
       filtered = filtered.filter(p => p.propertyType?.toLowerCase() === selectedCategory.toLowerCase());
-    }
     if (searchQuery.trim() !== '') {
       const fuse = new Fuse(filtered, fuseOptions);
       filtered = fuse.search(searchQuery).map(r => r.item);
     }
-    setFilteredProperties(filtered);
-  }, [searchQuery, selectedCategory, properties]);
+    if (minPrice) filtered = filtered.filter(p => p.price >= parseInt(minPrice));
+    if (maxPrice) filtered = filtered.filter(p => p.price <= parseInt(maxPrice));
+    if (showML) {
+      const mlOnly = mlRecommended.filter(ml => !filtered.some(p => p._id === ml._id));
+      setFilteredProperties([...mlOnly, ...filtered]);
+    } else {
+      setFilteredProperties(filtered);
+    }
+  }, [searchQuery, selectedCategory, properties, mlRecommended, showML, minPrice, maxPrice]);
 
-  const statusBarHeight = RNStatusBar.currentHeight || 0;
+  useEffect(() => {
+    const filteredProperties = properties.filter(item => {
+      if (!searchQuery.trim()) return true;
+      const query = searchQuery.toLowerCase();
+      return (
+        (item.name && item.name.toLowerCase().includes(query)) ||
+        (item.location?.address && item.location.address.toLowerCase().includes(query))
+      );
+    });
+    setFilteredProperties(filteredProperties);
+  }, [searchQuery, properties]);
 
   const handlePropertyPress = (property) => {
     setSelectedProperty(property);
@@ -87,176 +152,229 @@ export default function Home() {
     setCurrentImageIndex(0);
   };
 
-  const handleCreatePress = () => {
-    navigation.navigate('CreateProperty');
+  const getImageUri = (property) => {
+    const path = property?.images?.[0];
+    return path?.startsWith('http') ? path : `https://rentify-server-ge0f.onrender.com${path?.startsWith('/') ? path : '/' + path}`;
   };
 
-  const getImageUri = (property) => {
-    if (property?.images?.length > 0) {
-      const imagePath = property.images[0];
-      if (imagePath.startsWith('http')) {
-        return imagePath;
-      } else {
-        return `https://rentify-server-ge0f.onrender.com${imagePath.startsWith('/') ? imagePath : `/${imagePath}`}`;
-      }
-    }
-    return 'https://picsum.photos/200/300';
-  };
+  const renderPropertyCard = ({ item }) => (
+    <View style={styles.gridCard}>
+      <TouchableOpacity onPress={() => handlePropertyPress(item)}>
+        <Image source={{ uri: getImageUri(item) }} style={styles.gridImage} />
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.saveButton} onPress={() => {/* TODO: Save property */}}>
+        <Ionicons name="heart-outline" size={22} color={COLORS.primary} />
+      </TouchableOpacity>
+      <Text style={styles.gridName} numberOfLines={1}>{item.name}</Text>
+      <Text style={styles.gridPrice}>₱{item.price}/month</Text>
+      <Text style={styles.gridLocation} numberOfLines={1}>{item.location?.address}</Text>
+    </View>
+  );
 
   return (
-    <View style={[styles.container, { paddingTop: statusBarHeight }]}>
-      <RNStatusBar barStyle="dark-content" backgroundColor={COLORS.white} />
+    <View style={styles.container}>
+      <StatusBar hidden />
 
-      <View style={styles.header}>
-        <Text style={styles.welcomeText}>Welcome "{username}" 👋</Text>
-        <View style={styles.headerRight}>
-          <Ionicons name="notifications" size={24} color={COLORS.primary} />
-          <Image
-            source={{ uri: profilePicture }}
-            style={styles.profileImage}
-            onError={() => setProfilePicture('https://i.pravatar.cc/300')}
-          />
+      {/* Modern Airbnb-style Header */}
+      <View style={styles.airbnbHeader}>
+        <View style={styles.headerLeft}>
+          <Text style={styles.airbnbTitle}>Rentify</Text>
+          <Text style={styles.airbnbSubtitle}>Find your next stay</Text>
         </View>
-      </View>
-
-      <View style={styles.buttonContainer}>
-        <TouchableOpacity style={styles.button} onPress={() => router.push('/(tabs)/Maps')}>
-          <Ionicons name="location-sharp" size={24} color="white" />
-          <Text style={styles.buttonText}>Nearby</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.button} onPress={handleCreatePress}>
-          <Ionicons name="add-circle" size={24} color="white" />
-          <Text style={styles.buttonText}>Create</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.button}>
-          <Ionicons name="home" size={24} color="white" />
-          <Text style={styles.buttonText}>Property</Text>
+        <TouchableOpacity onPress={() => navigation.navigate('Profile')}>
+          <Image source={{ uri: profilePicture }} style={styles.profileImageLarge} />
         </TouchableOpacity>
       </View>
 
-      <View style={styles.searchContainer}>
+      {/* Algorithm Selection Chips */}
+      <View style={styles.chipRow}>
+        <TouchableOpacity
+          style={[styles.chip, algo === 'knn' && styles.chipActive]}
+          onPress={() => setAlgo('knn')}
+          accessibilityLabel="Select KNN recommendation algorithm"
+        >
+          <Text style={[styles.chipText, algo === 'knn' && styles.chipTextActive]}>KNN</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.chip, algo === 'kmeans' && styles.chipActive]}
+          onPress={() => setAlgo('kmeans')}
+          accessibilityLabel="Select KMeans recommendation algorithm"
+        >
+          <Text style={[styles.chipText, algo === 'kmeans' && styles.chipTextActive]}>KMeans</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Modern Search Bar with Location Picker */}
+      {/* Modern Search Bar with Location Picker */}
+      <View style={styles.searchBarWrapper}>
+        <Ionicons name="search" size={22} color={COLORS.primary} style={{ marginHorizontal: 8 }} />
         <TextInput
-          style={styles.searchInput}
-          placeholder="Search room..."
-          placeholderTextColor="#999"
+          style={styles.searchBar}
+          placeholder="Where to?"
           value={searchQuery}
           onChangeText={setSearchQuery}
+          placeholderTextColor="#b0b0b0"
+          accessibilityLabel="Search properties by location or keyword"
         />
-        <TouchableOpacity style={styles.searchButton}>
-          <Ionicons name="search" size={24} color="white" />
+        
+      </View>
+
+      {/* Price Filter Row */}
+      {/* Price Filter Row */}
+      <View style={styles.priceFilterRowModern}>
+        <View style={styles.priceInputLabelGroup}>
+          <Text style={styles.priceInputLabel}>Min</Text>
+          <TextInput
+            style={styles.priceInputModern}
+            placeholder="₱"
+            keyboardType="numeric"
+            value={minPrice}
+            onChangeText={setMinPrice}
+            placeholderTextColor="#b0b0b0"
+            accessibilityLabel="Minimum price"
+          />
+        </View>
+        <Text style={styles.priceRangeDivider}>–</Text>
+        <View style={styles.priceInputLabelGroup}>
+          <Text style={styles.priceInputLabel}>Max</Text>
+          <TextInput
+            style={styles.priceInputModern}
+            placeholder="₱"
+            keyboardType="numeric"
+            value={maxPrice}
+            onChangeText={setMaxPrice}
+            placeholderTextColor="#b0b0b0"
+            accessibilityLabel="Maximum price"
+          />
+        </View>
+        <TouchableOpacity
+          style={[styles.recommendButtonModern, loadingML && { opacity: 0.7 }]}
+          onPress={fetchMLRecommendations}
+          disabled={loadingML}
+          accessibilityLabel="Get AI property recommendations"
+          activeOpacity={0.85}
+        >
+          {loadingML ? (
+            <ActivityIndicator size="small" color="#fff" style={{ marginRight: 6 }} />
+          ) : (
+            <Ionicons name="bulb-outline" size={18} color="#fff" style={{ marginRight: 5 }} />
+          )}
+          <Text style={styles.recommendButtonTextModern}>
+            {loadingML ? 'Loading...' : (showML ? 'Recommended' : 'AI Suggest')}
+          </Text>
         </TouchableOpacity>
       </View>
 
-      <View style={styles.categoryWrapper}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {categories.map(category => (
+      {/* Category Scroll */}
+      <View style={styles.floatingCategoryBarWrapper}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.floatingCategoryBar}
+          contentContainerStyle={{ alignItems: 'center', paddingHorizontal: 6 }}
+        >
+          {categories.map(cat => (
             <TouchableOpacity
-              key={category}
-              onPress={() => setSelectedCategory(category)}
-              style={[styles.categoryButton, selectedCategory === category && styles.categoryButtonActive]}
+              key={cat}
+              onPress={() => setSelectedCategory(cat)}
+              style={[styles.floatingCategoryChip, selectedCategory === cat && styles.floatingCategoryChipActive]}
+              accessibilityLabel={`Filter by ${cat}`}
+              activeOpacity={0.85}
             >
-              <Text style={[styles.categoryText, selectedCategory === category && styles.categoryTextActive]}>
-                {category}
-              </Text>
+              <Text style={[styles.floatingCategoryChipText, selectedCategory === cat && styles.floatingCategoryChipTextActive]}>{cat}</Text>
+              {selectedCategory === cat && (
+                <Animated.View style={styles.floatingCategoryChipUnderline} />
+              )}
             </TouchableOpacity>
           ))}
         </ScrollView>
       </View>
 
-      <ScrollView contentContainerStyle={{ ...styles.scrollContent, paddingBottom: 100 }}>
-        <View style={styles.filteredDataContainer}>
-          {filteredProperties.length > 0 ? (
-            filteredProperties.map((property, index) => (
-              <View key={property._id || index} style={styles.propertyCard}>
-                <Image
-                  source={{ uri: getImageUri(property) }}
-                  style={styles.propertyImage}
-                />
-                <View style={styles.namePriceRow}>
-                  <Text style={styles.propertyName}>{property.name}</Text>
-                  <Text style={styles.propertyPrice}>₱{property.price} /month</Text>
-                </View>
-                <Text style={styles.propertyLocation}>{property.location?.address || 'Location not available'}</Text>
-                <Text style={styles.propertyDescription}>{property.description}</Text>
-                <TouchableOpacity style={styles.propertyButton} onPress={() => handlePropertyPress(property)}>
-                  <Text style={styles.propertyButtonText}>View Details</Text>
-                </TouchableOpacity>
-              </View>
-            ))
-          ) : (
-            <Text style={styles.noResultsText}>No properties found</Text>
-          )}
-        </View>
-      </ScrollView>
+      {/* Property Grid/List */}
+      {/* Property Grid/List */}
+      <FlatList
+        data={showML ? mlRecommended : filteredProperties}
+        keyExtractor={item => item._id?.toString() || item.id?.toString()}
+        renderItem={renderPropertyCard}
+        numColumns={2}
+        columnWrapperStyle={{ justifyContent: 'space-between' }}
+        showsVerticalScrollIndicator={false}
+        ListEmptyComponent={() => (
+          <View style={{ alignItems: 'center', marginTop: 32 }}>
+            <Text style={{ color: COLORS.text, opacity: 0.7, fontSize: 16 }}>
+              {searchQuery.trim() ? 'No properties found for your search.' : 'No properties found.'}
+            </Text>
+          </View>
+        )}
+        contentContainerStyle={{ paddingBottom: 120 }}
+      />
 
-      {selectedProperty && (
-        <Modal animationType="slide" transparent visible={modalVisible} onRequestClose={handleCloseModal}>
-          <View style={styles.modalContainer}>
-            <ScrollView contentContainerStyle={styles.modalContent}>
-              <TouchableOpacity style={styles.closeButton} onPress={handleCloseModal}>
-                <Ionicons name="close" size={24} color={COLORS.primary} />
-              </TouchableOpacity>
-
-              <View style={styles.carouselWrapper}>
-                <ScrollView
-                  horizontal
-                  pagingEnabled
-                  showsHorizontalScrollIndicator={false}
-                  onScroll={e => {
-                    const index = Math.round(
-                      e.nativeEvent.contentOffset.x / Dimensions.get('window').width
-                    );
-                    setCurrentImageIndex(index);
-                  }}
-                  scrollEventThrottle={16}
-                >
-                  {selectedProperty.images?.map((img, idx) => (
+      {/* Property Details Modal (Sheet) */}
+      <Modal visible={modalVisible} animationType="slide" transparent onRequestClose={handleCloseModal}>
+        <View style={styles.modalOverlay}>
+          <Animated.View
+            style={[styles.sheetModal, { transform: [{ translateY: slideAnim }] }]}
+            {...panResponder.panHandlers}
+          >
+            <TouchableOpacity onPress={handleCloseModal} style={styles.sheetCloseBtn} accessibilityLabel="Close property details">
+              <Ionicons name="close" size={28} color={COLORS.primary} />
+            </TouchableOpacity>
+            {selectedProperty && (
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}>
+                  {selectedProperty.images?.map((img, i) => (
                     <Image
-                      key={idx}
-                      source={{ uri: img }}
-                      style={styles.modalImage}
-                      resizeMode="cover"
+                      key={i}
+                      source={{ uri: getImageUri({ images: [img] }) }}
+                      style={styles.sheetImage}
                     />
                   ))}
                 </ScrollView>
-
-                {/* Dot Indicator */}
-                <View style={styles.dotContainer}>
-                  {selectedProperty.images?.map((_, idx) => (
-                    <View
-                      key={idx}
-                      style={[
-                        styles.dot,
-                        currentImageIndex === idx && styles.activeDot,
-                      ]}
-                    />
-                  ))}
+                <Text style={styles.sheetTitle}>{selectedProperty.name}</Text>
+                <Text style={styles.sheetPrice}>₱{selectedProperty.price}/month</Text>
+                <Text style={styles.sheetLocation}>{selectedProperty.location?.address}</Text>
+                <Text style={styles.sheetDescription}>{selectedProperty.description}</Text>
+                {selectedProperty.amenities && (
+                  <View style={styles.amenitiesContainer}>
+                    <Text style={styles.amenitiesTitle}>Amenities:</Text>
+                    {selectedProperty.amenities.map((item, index) => (
+                      <Text key={index} style={styles.amenityItem}>• {item}</Text>
+                    ))}
+                  </View>
+                )}
+                <View style={styles.sheetActions}>
+                  <TouchableOpacity style={styles.modernContactButton} onPress={() => alert(`Contact ${selectedProperty.postedBy || 'owner'}`)}>
+                    <Text style={styles.modernContactButtonText}>Contact</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.modernRentButton} onPress={() => alert(`You chose to rent: ${selectedProperty.name}`)}>
+                    <Text style={styles.modernRentButtonText}>Rent</Text>
+                  </TouchableOpacity>
                 </View>
-              </View>
 
-              <Text style={styles.modalName}>{selectedProperty.name}</Text>
-              
-              <Text style={styles.modalLocation}>Location: {selectedProperty.location?.address || 'N/A'}</Text>
-              <Text style={styles.modalPrice}>₱{selectedProperty.price}</Text>
-              <Text style={styles.modalStatus}>Status: {selectedProperty.status}</Text>
-              <Text style={styles.modalAmenities}>
-                Amenities: {Array.isArray(selectedProperty.amenities) ? selectedProperty.amenities.join(', ') : 'N/A'}
-              </Text>
-              <Text style={styles.modalDescription}>Description: {selectedProperty.description}</Text>
-              
-
-              <View style={styles.modalButtons}>
-                <TouchableOpacity style={styles.contactButton}>
-                  <Text style={styles.contactButtonText}>Contact</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.contactButton}>
-                  <Text style={styles.contactButtonText}>Rent</Text>
-                </TouchableOpacity>
-              </View>
-
-              {selectedProperty.location?.latitude && selectedProperty.location?.longitude && (
+                {/* Map with Pin */}
+                <View style={{ borderRadius: 18, overflow: 'hidden', marginTop: 10, marginBottom: 18 }}>
+                  <MapView
+                    style={{ width: '100%', height: 180 }}
+                    initialRegion={{
+                      latitude: selectedProperty.location.latitude,
+                      longitude: selectedProperty.location.longitude,
+                      latitudeDelta: 0.005,
+                      longitudeDelta: 0.005,
+                    }}
+                    scrollEnabled={false}
+                    zoomEnabled={false}
+                  >
+                    <Marker
+                      coordinate={{
+                        latitude: selectedProperty.location.latitude,
+                        longitude: selectedProperty.location.longitude,
+                      }}
+                      title={selectedProperty.location.address}
+                    />
+                  </MapView>
+                </View>
                 <MapView
-                  style={styles.map}
+                  style={styles.sheetMap}
                   initialRegion={{
                     latitude: selectedProperty.location.latitude,
                     longitude: selectedProperty.location.longitude,
@@ -269,97 +387,604 @@ export default function Home() {
                       latitude: selectedProperty.location.latitude,
                       longitude: selectedProperty.location.longitude,
                     }}
-                    title= {selectedProperty.location.address}
+                    title={selectedProperty.location.address}
                   />
                 </MapView>
-              )}
-            </ScrollView>
-          </View>
-        </Modal>
-      )}
+              </ScrollView>
+            )}
+          </Animated.View>
+        </View>
+      </Modal>
+
     </View>
   );
 }
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.white },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', position: 'absolute', top: 15, left: 0, right: 0, padding: 15, backgroundColor: 'white', zIndex: 10 },
-  welcomeText: { flex: 1, fontSize: 20, fontWeight: 'bold', color: COLORS.primary, paddingLeft: 10 },
-  headerRight: { flexDirection: 'row', alignItems: 'center' },
-  profileImage: { width: 50, height: 50, borderRadius: 40, borderWidth: 0.5, borderColor: COLORS.primary, marginLeft: 10 },
-  buttonContainer: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 100, marginBottom: 20, paddingHorizontal: 10 },
-  button: { backgroundColor: COLORS.primary, paddingVertical: 12, paddingHorizontal: 18, borderRadius: 10, alignItems: 'center', width: '28%' },
-  buttonText: { marginTop: 5, color: 'white', fontSize: 14, fontWeight: 'bold' },
-  searchContainer: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 20 },
-  searchInput: { flex: 1, borderWidth: 1, borderColor: COLORS.primary, borderRadius: 8, padding: 12, fontSize: 16, marginRight: 10 },
-  searchButton: { backgroundColor: COLORS.primary, borderRadius: 8, padding: 10 },
-  categoryWrapper: { height: 50, marginTop: 10, paddingHorizontal: 20 },
-  categoryButton: { paddingVertical: 8, paddingHorizontal: 16, backgroundColor: '#f0f0f0', borderRadius: 20, marginRight: 10, alignSelf: 'center' },
-  categoryButtonActive: { backgroundColor: COLORS.primary },
-  categoryText: { fontWeight: 'bold', color: '#333' },
-  categoryTextActive: { color: 'white' },
-  filteredDataContainer: { paddingHorizontal: 10, marginTop: 20 },
-  propertyCard: { marginBottom: 20, borderRadius: 12, overflow: 'hidden', backgroundColor: 'rgba(178, 212, 255, 0.3)',margin:15, },
-  namePriceRow: {
+  container: {
+    flex: 1,
+    backgroundColor: '#f6f6fa', // soft background
+  },
+  airbnbHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginHorizontal: 10,
-    marginTop: 10,
+    padding: 24,
+    backgroundColor: COLORS.primary,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    elevation: 6,
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.15,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 18,
   },
-  propertyImage: { width: '100%', height: 200 },
-  propertyName: { fontSize: 20, fontWeight: 'bold', marginTop: 10,color: COLORS.primary , padding:5},
-  propertyPrice: { fontSize: 16, fontWeight: '600', marginHorizontal: 10 , backgroundColor: 'rgba(248, 184, 8, 0.94)', marginVertical: 5, padding: 5, borderRadius: 8 , width: 100, textAlign: 'center' },
-  propertyLocation: { marginHorizontal: 10, color: 'gray' },
-  propertyDescription: { marginHorizontal: 10, marginVertical: 5, color: 'gray' },
-  propertyButton: { margin: 10, backgroundColor: COLORS.primary, padding: 10, borderRadius: 8 },
-  propertyButtonText: { color: 'white', fontWeight: 'bold', textAlign: 'center' },
-  noResultsText: { textAlign: 'center', marginTop: 20, color: 'gray' },
-  modalContainer: { flex: 1, justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.5)', paddingTop: 30 },
-  modalContent: { backgroundColor: 'white', margin: 10, borderRadius: 10, padding: 15 },
-  closeButton: { alignSelf: 'flex-end' },
-  modalImage: { width: '100%', height: 200, borderRadius: 10 },
-  modalName: { fontSize: 24, fontWeight: 'bold', marginTop: 10 },
-  modalDescription: { marginTop: 10 },
-  modalLocation: { marginTop: 5 },
-  modalPrice: { marginTop: 5 },
-  modalStatus: { marginTop: 5 },
-  modalPostedBy: { marginTop: 5 },
-  modalAmenities: { marginTop: 5 },
-  modalButtons: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 15 },
-  contactButton: { backgroundColor: COLORS.primary, flex: 1, marginHorizontal: 5, padding: 10, borderRadius: 8 },
-  contactButtonText: { color: 'white', textAlign: 'center', fontWeight: 'bold' },
-  map: { width: '100%', height: 250, marginTop: 20, borderRadius: 10 },
-  carouselWrapper: {
-    width: '100%',
-    height: 250,
+  headerLeft: {
+    flexDirection: 'column',
+    justifyContent: 'center',
+  },
+  airbnbTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: COLORS.white,
+    letterSpacing: 1,
+  },
+  airbnbSubtitle: {
+    fontSize: 16,
+    color: '#f5f5f5',
+    marginTop: 2,
+    fontWeight: '500',
+  },
+  profileImageLarge: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  searchBarWrapper: {
+    flexDirection: 'row',
     alignItems: 'center',
+    marginHorizontal: 18,
+    marginTop: -24,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    elevation: 3,
+    shadowColor: '#222',
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    zIndex: 10,
+  },
+  searchBar: {
+    flex: 1,
+    height: 44,
+    padding: 10,
+    fontSize: 17,
+    backgroundColor: '#f6f6fa',
+    borderRadius: 12,
+    marginRight: 10,
+    color: COLORS.text,
+  },
+  filterButton: {
+    padding: 10,
+    backgroundColor: COLORS.primary,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 2,
+  },
+  // --- MODERN PRICE RANGE & RECOMMEND BUTTON ---
+  priceFilterRowModern: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 3,
+    backgroundColor: '#f8f9fd',
+    borderRadius: 18,
+    marginHorizontal: 12,
+    marginTop: 10,
+    elevation: 2,
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.07,
+    shadowOffset: { width: 0, height: 1 },
+    shadowRadius: 4,
+    borderWidth: 1,
+    borderColor: '#ececec',
+    minHeight: 34,
+    gap: 5,
+  },
+  priceInputLabelGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  priceInputLabel: {
+    fontSize: 12,
+    color: '#888',
+    fontWeight: '600',
+    marginRight: 3,
+    marginLeft: 1,
+  },
+  priceInputModern: {
+    width: 60,
+    height: 26,
+    paddingHorizontal: 8,
+    fontSize: 13,
+    backgroundColor: '#fff',
+    borderRadius: 13,
+    color: COLORS.text,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    textAlign: 'center',
+  },
+  priceRangeDivider: {
+    fontSize: 18,
+    color: '#aaa',
+    marginHorizontal: 2,
+    fontWeight: 'bold',
+    marginBottom: 1,
+  },
+  recommendButtonModern: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primary,
+    borderRadius: 16,
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    marginLeft: 10,
+    elevation: 3,
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.13,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 8,
+    minHeight: 30,
+  },
+  recommendButtonTextModern: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 14,
+    letterSpacing: 0.2,
+  },
+  recommendButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    backgroundColor: COLORS.primary,
+    borderRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    elevation: 2,
+  },
+  recommendButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: 'bold',
+    marginLeft: 6,
+  },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16 },
+  welcomeText: { fontSize: 18, fontWeight: 'bold' },
+  headerRight: { flexDirection: 'row', alignItems: 'center' },
+  profileImage: { width: 32, height: 32, borderRadius: 16, marginLeft: 10 },
+  buttonContainer: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 10 },
+  button: { backgroundColor: COLORS.primary, flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 10 },
+  buttonText: { color: 'white', marginLeft: 6 },
+  priceFilterRow: { flexDirection: 'row', justifyContent: 'space-around', paddingHorizontal: 10 },
+  searchContainer: { flexDirection: 'row', margin: 10 },
+  searchInput: { backgroundColor: '#fff', flex: 1, borderRadius: 8, padding: 10, margin: 5 },
+  searchButton: { backgroundColor: COLORS.primary, padding: 10, borderRadius: 8, justifyContent: 'center' },
+  categoryWrapper: {
+    marginVertical: 10,
+    paddingHorizontal: 10,
+  },
+  categoryButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    marginHorizontal: 6,
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    borderWidth: 1,
+    zIndex: 1,
+    padding:20,
+    
+    borderColor: COLORS.primary,
+  },
+  categoryButtonActive: {
+    backgroundColor: COLORS.primary,
+  },
+  categoryText: {
+    fontSize: 14,
+    color: COLORS.primary,
+    paddingHorizontal: 10,
+  },
+  categoryTextActive: {
+    fontWeight: 'bold',
+    color: COLORS.white,
+  },
+  filteredDataContainer: { paddingHorizontal: 10 },
+  // --- PROPERTY GRID ---
+  gridContainer: {
+    paddingBottom: 120,
+    paddingHorizontal: 10,
+  },
+  gridRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  gridCard: {
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    marginBottom: 18,
+    width: '48%',
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.09,
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 18,
+    elevation: 5,
+    overflow: 'hidden',
+    position: 'relative',
+    marginHorizontal: '1%',
+  },
+  gridImage: {
+    width: '100%',
+    height: 140,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    resizeMode: 'cover',
+    backgroundColor: '#f3f3f3',
+  },
+  saveButton: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 7,
+    elevation: 3,
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.16,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  gridName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginTop: 10,
+    marginHorizontal: 12,
+    color: COLORS.text,
+  },
+  gridPrice: {
+    fontSize: 15,
+    color: COLORS.primary,
+    fontWeight: 'bold',
+    marginTop: 4,
+    marginHorizontal: 12,
+    backgroundColor: '#f4f4ff',
+    alignSelf: 'flex-start',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    marginBottom: 2,
+  },
+  gridLocation: {
+    fontSize: 13,
+    color: '#888',
+    marginHorizontal: 12,
+    marginBottom: 10,
+  },
+
+  // --- CATEGORY CHIPS ---
+  categoryWrapper: {
+    marginVertical: 16,
+    paddingHorizontal: 10,
+    flexDirection: 'row',
+  },
+  categoryButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    marginHorizontal: 6,
+    backgroundColor: '#f2f2f7',
+    borderRadius: 16,
+    elevation: 2,
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.07,
+    shadowOffset: { width: 0, height: 1 },
+    shadowRadius: 4,
+    borderWidth: 0,
+  },
+  categoryButtonActive: {
+    backgroundColor: COLORS.primary,
+    elevation: 5,
+    shadowOpacity: 0.18,
+  },
+  categoryText: {
+    fontSize: 15,
+    color: COLORS.primary,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
+  categoryTextActive: {
+    fontWeight: 'bold',
+    color: COLORS.white,
+    letterSpacing: 0.2,
+  },
+
+
+  // --- MODAL/SHEET ---
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.18)',
+    justifyContent: 'flex-end',
+  },
+  sheetModal: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    padding: 18,
+    minHeight: 420,
+    elevation: 16,
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.18,
+    shadowOffset: { width: 0, height: -2 },
+    shadowRadius: 24,
+    alignItems: 'center',
+  },
+  sheetCloseBtn: {
+    alignSelf: 'center',
+    marginBottom: 10,
+    backgroundColor: '#e1e1e1',
+    borderRadius: 20,
+    padding: 8,
+    marginTop: 6,
+  },
+  sheetImage: {
+    width: Dimensions.get('window').width - 36,
+    height: 210,
+    borderRadius: 22,
+    marginBottom: 12,
+    resizeMode: 'cover',
+    alignSelf: 'center',
+    backgroundColor: '#f3f3f3',
+  },
+  sheetTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    marginTop: 10,
+    marginBottom: 2,
+    color: COLORS.primary,
+    textAlign: 'center',
+  },
+  sheetPrice: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginVertical: 4,
+    color: '#27ae60',
+    textAlign: 'center',
+    backgroundColor: '#eaffea',
+    alignSelf: 'center',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 2,
+  },
+  sheetLocation: {
+    fontSize: 15,
+    color: '#555',
+    marginBottom: 6,
+    textAlign: 'center',
+  },
+  sheetDescription: {
+    fontSize: 15,
+    color: '#333',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  sheetActions: {
+    marginTop: 16,
+    marginBottom: 20,
+  },
+  // --- MODERN MODAL BUTTONS ---
+  modernContactButton: {
+    backgroundColor: '#fff',
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+    borderRadius: 24,
+    paddingVertical: 15,
+    marginBottom: 12,
+    alignItems: 'center',
+    width: '100%',
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.13,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  modernContactButtonText: {
+    color: COLORS.primary,
+    fontWeight: 'bold',
+    fontSize: 18,
+    letterSpacing: 0.3,
+  },
+  modernRentButton: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 24,
+    paddingVertical: 15,
+    alignItems: 'center',
+    width: '100%',
+    marginTop: 6,
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.15,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  modernRentButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 18,
+    letterSpacing: 0.3,
+  },
+
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'white',
+    marginTop: 40,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    padding: 16,
+  },
+  
+  modalContent: {
+    paddingBottom: 20,
+  },
+  
+  closeButton: {
+    alignSelf: 'flex-end',
+    marginBottom: 10,
+  },
+  
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  
+  modalPrice: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginTop: 8,
+    color: COLORS.primary,
+  },
+  
+  modalLocation: {
+    fontSize: 16,
+    color: '#555',
+    marginBottom: 8,
+  },
+  
+  modalDescription: {
+    fontSize: 14,
+    color: '#333',
+    marginBottom: 12,
   },
   
   modalImage: {
-    width: Dimensions.get('window').width,
-    height: 250,
+    width: Dimensions.get('window').width - 32,
+    height: 200,
+    borderRadius: 8,
+    marginBottom: 12,
     resizeMode: 'cover',
-    
   },
-  
-  dotContainer: {
+  chipRow: {
     flexDirection: 'row',
     justifyContent: 'center',
+    marginVertical: 8,
+  },
+  // --- FLOATING CATEGORY BAR ---
+  floatingCategoryBarWrapper: {
+    marginHorizontal: 12,
+    marginTop: 12,
+    marginBottom: 2,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.93)',
+    elevation: 6,
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.10,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 10,
+    paddingVertical: 0,
+  },
+  floatingCategoryBar: {
+    borderRadius: 22,
+    minHeight: 38,
+    maxHeight: 38,
+  },
+  floatingCategoryChip: {
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    backgroundColor: '#f4f5fa',
+    marginHorizontal: 3,
+    elevation: 0,
     alignItems: 'center',
-    marginTop: 8,
+    justifyContent: 'center',
+    minHeight: 28,
+    minWidth: 50,
+    flexDirection: 'column',
+    position: 'relative',
   },
-  
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#ccc',
-    marginHorizontal: 4,
-  },
-  
-  activeDot: {
+  floatingCategoryChipActive: {
     backgroundColor: COLORS.primary,
-    width: 10,
-    height: 10,
+    elevation: 2,
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.17,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 8,
+  },
+  floatingCategoryChipText: {
+    fontSize: 13,
+    color: COLORS.primary,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+    textAlign: 'center',
+  },
+  floatingCategoryChipTextActive: {
+    fontWeight: 'bold',
+    color: COLORS.white,
+    letterSpacing: 0.2,
+    textAlign: 'center',
+  },
+  floatingCategoryChipUnderline: {
+    width: 16,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: COLORS.accent || '#ffd700', // fallback accent
+    marginTop: 2,
+    alignSelf: 'center',
+  },
+
+  
+  
+  amenitiesContainer: {
+    marginVertical: 10,
+  },
+  
+  amenitiesTitle: {
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  
+  amenityItem: {
+    fontSize: 14,
+    color: '#444',
+  },
+  closeButton: { alignSelf: 'flex-end', padding: 10 },
+  modalImage: { width: Dimensions.get('window').width, height: 200 },
+
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: 20,
+  },
+  contactButton: {
+    backgroundColor: '#3498db',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+  },
+  contactButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  rentButton: {
+    backgroundColor: '#27ae60',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+  },
+  rentButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
   },
 });
