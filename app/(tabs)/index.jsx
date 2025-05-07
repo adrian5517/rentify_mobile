@@ -294,7 +294,11 @@ export default function Home() {
       {/* Property Grid/List */}
       <FlatList
         data={showML ? mlRecommended : filteredProperties}
-        keyExtractor={item => item._id?.toString() || item.id?.toString()}
+        keyExtractor={(item, index) => {
+          // Prefer _id, then id, then fallback to index
+          const key = item._id?.toString() || item.id?.toString() || `item-${index}`;
+          return key;
+        }}
         renderItem={renderPropertyCard}
         numColumns={2}
         columnWrapperStyle={{ justifyContent: 'space-between' }}
@@ -324,7 +328,7 @@ export default function Home() {
                 <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}>
                   {selectedProperty.images?.map((img, i) => (
                     <Image
-                      key={i}
+                      key={img ? `${img}-${i}` : i}
                       source={{ uri: getImageUri({ images: [img] }) }}
                       style={styles.sheetImage}
                     />
@@ -338,7 +342,7 @@ export default function Home() {
                   <View style={styles.amenitiesContainer}>
                     <Text style={styles.amenitiesTitle}>Amenities:</Text>
                     {selectedProperty.amenities.map((item, index) => (
-                      <Text key={index} style={styles.amenityItem}>• {item}</Text>
+                      <Text key={item ? `${item}-${index}` : index} style={styles.amenityItem}>• {item}</Text>
                     ))}
                   </View>
                 )}
