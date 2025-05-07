@@ -24,7 +24,7 @@ export default function Home() {
   const navigation = useNavigation();
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
-  const categories = ['All', 'Apartment', 'Condo', 'House', 'Dorm'];
+  const categories = ['All', 'Apartment', 'Boarding House', 'House', 'Dorm'];
 
   const fuseOptions = {
     keys: ['name', 'description', 'location.address', 'postedBy', 'amenities'],
