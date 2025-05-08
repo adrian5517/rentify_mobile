@@ -90,8 +90,8 @@ if (profilePicture.includes('api.dicebear.com') && profilePicture.includes('/svg
       return alert('Permission denied');
     }
     let location = await Location.getCurrentPositionAsync({});
-    // Use minPrice or maxPrice, fallback to 2000 if not set
-    let price = minPrice ? parseInt(minPrice) : (maxPrice ? parseInt(maxPrice) : 2000);
+    
+    let price = minPrice ? parseInt(minPrice) : (maxPrice ? parseInt(maxPrice) : 1000);
     const res = await fetch('https://ml-rentify.onrender.com/ml', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -185,8 +185,8 @@ if (profilePicture.includes('api.dicebear.com') && profilePicture.includes('/svg
       </View>
 
 
-      {/* Modern Search Bar with Location Picker */}
-      {/* Modern Search Bar with Location Picker */}
+      
+    
       <View style={styles.searchBarWrapper}>
         <Ionicons name="search" size={22} color={COLORS.primary} style={{ marginHorizontal: 8 }} />
         <TextInput
@@ -200,8 +200,8 @@ if (profilePicture.includes('api.dicebear.com') && profilePicture.includes('/svg
         
       </View>
 
-      {/* Price Filter Row */}
-      {/* Price Filter Row */}
+      
+      
       <View style={styles.priceFilterRowModern}>
         <View style={styles.priceInputLabelGroup}>
           <Text style={styles.priceInputLabel}>Min</Text>
@@ -271,8 +271,7 @@ if (profilePicture.includes('api.dicebear.com') && profilePicture.includes('/svg
         </ScrollView>
       </View>
 
-      {/* Property Grid/List */}
-      {/* Property Grid/List */}
+      
       <FlatList
         data={showML ? mlRecommended : filteredProperties}
         keyExtractor={(item, index) => {
@@ -336,7 +335,7 @@ if (profilePicture.includes('api.dicebear.com') && profilePicture.includes('/svg
                   </TouchableOpacity>
                 </View>
 
-                {/* Map with Pin */}
+                
                 <View style={{ borderRadius: 18, overflow: 'hidden', marginTop: 10, marginBottom: 18 }}>
                   <MapView
                     style={{ width: '100%', height: 180 }}
@@ -388,7 +387,7 @@ if (profilePicture.includes('api.dicebear.com') && profilePicture.includes('/svg
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f6f6fa', // soft background
+    backgroundColor: '#f6f6fa', 
   },
   airbnbHeader: {
     flexDirection: 'row',
