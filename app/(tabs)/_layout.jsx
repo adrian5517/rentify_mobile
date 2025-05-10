@@ -10,9 +10,10 @@ export default function TabLayout() {
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: '#fff',
+        display:'none',
         tabBarInactiveTintColor: '#d0f0c0',
         tabBarStyle: {
-          backgroundColor: '#03045e',
+          backgroundColor: COLORS.primary,
           borderTopWidth: 0,
           height: 80,
           paddingTop:10,
@@ -57,12 +58,12 @@ export default function TabLayout() {
       />
      
       <Tabs.Screen
-        name="CreateProperty"
+        name="List"
         options={{
-          title: 'Create',
+          title: 'List',
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
-              name={focused ? 'calendar' : 'calendar-outline'}
+              name={focused ? 'list' : 'list-outline'}
               size={24}
               color={color}
             />

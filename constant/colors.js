@@ -32,19 +32,20 @@
   
   // Rentify Color Palette
   
+  // Rentify Catchy 3-Color Palette
   const COLORS = {
-    primary: "#03045E", // Deep Blue
-    textPrimary: "#0077B6", // Light Blue
-    textSecondary: "#00B4D8", // Cyan
-    textDark: "#90E0EF", // Light Cyan
-    placeholderText: "#CAF0FB", // Very Light Cyan
-    background: "#CAF0FB", // Very Light Cyan for background
-    cardBackground: "#90E0EF", // Light Cyan for card background
-    inputBackground: "#00B4D8", // Cyan for input background
-    border: "#0077B6", // Light Blue for borders
-    white: "#ffffff", // White
-    black: "#000000", // Black
-  };
+  primary: "#7B61FF",        // Main brand color
+  secondary: "#00C6AE",     // Secondary accent color
+  background: "#FAFAFF",    // Soft background
+  cardBackground: "#FFFFFF", // Card background
+  inputBackground: "#F4F4FB",// Input background
+  border: "#E3E1EF",        // Border
+  text: "#232323",           // Main text
+  textSecondary: "#00C6AE",  // Use secondary for accent text
+  placeholderText: "#B6B6C5",// Placeholder
+  white: "#FFFFFF",
+  black: "#000000",
+};
   
   
   

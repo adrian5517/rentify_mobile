@@ -35,7 +35,7 @@ export default function Signup() {
       Alert.alert("Success", "Account created successfully!", [
         {
           text: "OK",
-          onPress: () => router.push('/index'), // ✅ Navigate after confirmation
+          onPress: () => router.push('/login'), // ✅ Navigate after confirmation
         },
       ]);
     }
