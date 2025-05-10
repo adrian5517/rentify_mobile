@@ -9,14 +9,40 @@ import {
   TouchableOpacity,
   Image,
   ActivityIndicator,
+  Platform,
+  Modal,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
+import { Picker } from '@react-native-picker/picker';
+import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 
 export default function CreateProperty() {
+  const navigation = useNavigation();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [showTypePicker, setShowTypePicker] = useState(false);
+  const [showStatusPicker, setShowStatusPicker] = useState(false);
+
+  const propertyTypes = [
+    'Apartment',
+    'House',
+    'Boarding House',
+    'Room',
+    'Dorm',
+    'Studio',
+    'Townhouse',
+    
+  ];
+
+  const propertyStatus = [
+    'Available',
+    'For Sale',
+    'Rented',
+    'Sold'
+  ];
 
   const [property, setProperty] = useState({
     name: '',
@@ -165,6 +191,59 @@ export default function CreateProperty() {
     }
   };
 
+  const renderHeader = () => (
+    <View style={styles.header}>
+      <TouchableOpacity 
+        style={styles.backButton} 
+        onPress={() => navigation.navigate('List')}
+      >
+        <Ionicons name="arrow-back" size={24} color="#34495e" />
+      </TouchableOpacity>
+      <Text style={styles.headerTitle}>Create Property</Text>
+    </View>
+  );
+
+  const renderPickerModal = (visible, onClose, options, selectedValue, onSelect) => (
+    <Modal
+      visible={visible}
+      transparent={true}
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+              <Text style={styles.closeButtonText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView style={styles.pickerList}>
+            {options.map((option) => (
+              <TouchableOpacity
+                key={option}
+                style={[
+                  styles.pickerOption,
+                  selectedValue === option && styles.selectedOption
+                ]}
+                onPress={() => {
+                  onSelect(option);
+                  onClose();
+                }}
+              >
+                <Text style={[
+                  styles.pickerOptionText,
+                  selectedValue === option && styles.selectedOptionText
+                ]}>
+                  {option}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+
   const renderStep1 = () => (
     <>
       <Text style={styles.label}>Property Name:</Text>
@@ -177,13 +256,26 @@ export default function CreateProperty() {
       />
 
       <Text style={styles.label}>Property Type:</Text>
-      <TextInput
-        style={styles.input}
-        value={property.type}
-        onChangeText={text => setProperty(prev => ({ ...prev, type: text }))}
-        placeholder="e.g. Apartment, Condo , Room , Dorm"
-        placeholderTextColor="#999"
-      />
+      <TouchableOpacity
+        style={styles.pickerButton}
+        onPress={() => setShowTypePicker(true)}
+      >
+        <Text style={[
+          styles.pickerButtonText,
+          !property.type && styles.placeholderText
+        ]}>
+          {property.type || 'Select Property Type'}
+        </Text>
+        <Ionicons name="chevron-down" size={20} color="#34495e" />
+      </TouchableOpacity>
+
+      {renderPickerModal(
+        showTypePicker,
+        () => setShowTypePicker(false),
+        propertyTypes,
+        property.type,
+        (value) => setProperty(prev => ({ ...prev, type: value }))
+      )}
 
       <Text style={styles.label}>Price (₱):</Text>
       <TextInput
@@ -197,8 +289,9 @@ export default function CreateProperty() {
 
       <Text style={styles.label}>Description:</Text>
       <TextInput
-        style={[styles.input, { height: 80 }]}
+        style={[styles.input, styles.textArea]}
         multiline
+        numberOfLines={4}
         value={property.description}
         onChangeText={text => setProperty(prev => ({ ...prev, description: text }))}
         placeholder="Write something about the property"
@@ -206,13 +299,26 @@ export default function CreateProperty() {
       />
 
       <Text style={styles.label}>Status:</Text>
-      <TextInput
-        style={styles.input}
-        value={property.status}
-        onChangeText={text => setProperty(prev => ({ ...prev, status: text }))}
-        placeholder="e.g. For Sale, For Rent"
-        placeholderTextColor="#999"
-      />
+      <TouchableOpacity
+        style={styles.pickerButton}
+        onPress={() => setShowStatusPicker(true)}
+      >
+        <Text style={[
+          styles.pickerButtonText,
+          !property.status && styles.placeholderText
+        ]}>
+          {property.status || 'Select Status'}
+        </Text>
+        <Ionicons name="chevron-down" size={20} color="#34495e" />
+      </TouchableOpacity>
+
+      {renderPickerModal(
+        showStatusPicker,
+        () => setShowStatusPicker(false),
+        propertyStatus,
+        property.status,
+        (value) => setProperty(prev => ({ ...prev, status: value }))
+      )}
 
       <Text style={styles.label}>Amenities (comma-separated):</Text>
       <TextInput
@@ -286,27 +392,49 @@ export default function CreateProperty() {
   );
 
   return (
-    <ScrollView style={styles.container}>
-      
-      <View style={styles.card}>
-        {step === 1 ? renderStep1() : renderStep2()}
-      </View>
-    </ScrollView>
+    <View style={styles.mainContainer}>
+      {renderHeader()}
+      <ScrollView style={styles.container}>
+        <View style={styles.card}>
+          {step === 1 ? renderStep1() : renderStep2()}
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    paddingTop: 50,
-    padding: 20,
-    backgroundColor: '#f9f9f9',
+  mainContainer: {
     flex: 1,
+    backgroundColor: '#f9f9f9',
   },
-  
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: Platform.OS === 'ios' ? 50 : 40,
+    paddingHorizontal: 20,
+    paddingBottom: 15,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  backButton: {
+    padding: 8,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#34495e',
+    marginLeft: 10,
+  },
+  container: {
+    flex: 1,
+    padding: 20,
+  },
   card: {
     backgroundColor: '#fff',
     borderRadius: 12,
-    padding: 15,
+    padding: 20,
     marginBottom: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -315,22 +443,41 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   label: {
-    marginTop: 10,
+    marginTop: 15,
+    marginBottom: 5,
     fontWeight: '600',
     color: '#34495e',
+    fontSize: 16,
   },
   input: {
     borderWidth: 1,
     borderColor: '#dfe6e9',
-    padding: 10,
+    padding: 12,
     borderRadius: 8,
-    marginTop: 5,
     backgroundColor: '#fff',
+    fontSize: 16,
+  },
+  textArea: {
+    height: 100,
+    textAlignVertical: 'top',
+  },
+  pickerWrapper: {
+    borderWidth: 1,
+    borderColor: '#dfe6e9',
+    borderRadius: 8,
+    backgroundColor: '#fff',
+    marginBottom: 5,
+    overflow: 'hidden',
+  },
+  picker: {
+    height: 50,
+    width: '100%',
+    color: '#34495e',
   },
   button: {
-    marginTop: 20,
+    marginTop: 25,
     backgroundColor: '#3498db',
-    paddingVertical: 14,
+    paddingVertical: 15,
     borderRadius: 10,
     alignItems: 'center',
     shadowColor: '#2980b9',
@@ -347,14 +494,14 @@ const styles = StyleSheet.create({
   secondaryButton: {
     marginTop: 15,
     backgroundColor: '#bdc3c7',
-    paddingVertical: 12,
+    paddingVertical: 15,
     borderRadius: 10,
     alignItems: 'center',
   },
   secondaryText: {
     color: '#2c3e50',
     fontWeight: 'bold',
-    fontSize: 15,
+    fontSize: 16,
   },
   map: {
     width: '100%',
@@ -369,5 +516,67 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: '#ccc',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    alignItems: 'flex-end',
+  },
+  closeButton: {
+    padding: 5,
+  },
+  closeButtonText: {
+    color: '#3498db',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  pickerList: {
+    maxHeight: 300,
+  },
+  pickerOption: {
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  selectedOption: {
+    backgroundColor: '#f0f8ff',
+  },
+  pickerOptionText: {
+    fontSize: 16,
+    color: '#34495e',
+  },
+  selectedOptionText: {
+    color: '#3498db',
+    fontWeight: '600',
+  },
+  pickerButton: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#dfe6e9',
+    borderRadius: 8,
+    padding: 12,
+    backgroundColor: '#fff',
+    marginBottom: 5,
+  },
+  pickerButtonText: {
+    fontSize: 16,
+    color: '#34495e',
+  },
+  placeholderText: {
+    color: '#999',
   },
 });

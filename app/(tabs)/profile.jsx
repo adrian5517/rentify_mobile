@@ -85,7 +85,7 @@ if (profilePicture.includes('api.dicebear.com') && profilePicture.includes('/svg
           <ProfileActionButton 
             icon={<MaterialIcons name="house" size={24} color={COLORS.primary} />}
             title="My Listings"
-            onPress={() => router.push('/my-listings')}
+            onPress={() => router.push('/(tabs)/List')}
           />
           <ProfileActionButton 
             icon={<Ionicons name="heart-outline" size={24} color={COLORS.primary} />}
