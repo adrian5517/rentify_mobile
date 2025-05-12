@@ -195,7 +195,21 @@ export default function CreateProperty() {
     <View style={styles.header}>
       <TouchableOpacity 
         style={styles.backButton} 
-        onPress={() => navigation.navigate('List')}
+        onPress={() => {
+          setProperty({
+            name: '',
+            type: '',
+            price: '',
+            description: '',
+            status: '',
+            amenities: '',
+            address: '',
+            location: null,
+            images: [],
+          });
+          setStep(1);
+          navigation.goBack();
+        }}
       >
         <Ionicons name="arrow-back" size={24} color="#34495e" />
       </TouchableOpacity>
