@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { StyleSheet, View, Alert, Text, TouchableOpacity, Image, ScrollView } from 'react-native';
-
-import MapView, { Marker, Polyline } from 'react-native-maps';
+import { StyleSheet, View, Alert, Text, TouchableOpacity, Image, ScrollView, Animated, Dimensions } from 'react-native';
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
 import MapboxDirections from '@mapbox/mapbox-sdk/services/directions';
 import { BlurView } from 'expo-blur';
+import { Ionicons } from '@expo/vector-icons';
+import COLORS from '../../constant/colors';
 
 // Use require for consistent asset loading
 
@@ -15,8 +16,13 @@ const MAPBOX_TOKEN = 'pk.eyJ1IjoiYWRyaWFuNTUxNyIsImEiOiJjbTlyMHpubjYxcG9lMmtwdDV
 const directionsClient = MapboxDirections({ accessToken: MAPBOX_TOKEN });
 
 const getImageUri = (property) => {
-  const path = property?.images?.[0];
-  return path?.startsWith('http') ? path : `https://rentify-server-ge0f.onrender.com${path?.startsWith('/') ? path : '/' + path}`;
+  console.log('Property images:', property?.images); // Debug log
+  if (!property?.images?.length) return 'https://via.placeholder.com/400x300?text=No+Image';
+  const path = property.images[0];
+  if (!path) return 'https://via.placeholder.com/400x300?text=No+Image';
+  const imageUrl = path.startsWith('http') ? path : `https://rentify-server-ge0f.onrender.com${path.startsWith('/') ? path : '/' + path}`;
+  console.log('Image URL:', imageUrl); // Debug log
+  return imageUrl;
 };
 
 export default function Maps() {
@@ -31,6 +37,9 @@ export default function Maps() {
   const [selectedCluster, setSelectedCluster] = useState(0); // 0: Low, 1: Mid, 2: High
   const [loadingML, setLoadingML] = useState(false);
   const mapRef = useRef(null);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const expandAnim = useRef(new Animated.Value(0)).current;
+  const [showFilters, setShowFilters] = useState(false);
 
   // Helper to calculate bearing from user to a property
   function getBearing(lat1, lon1, lat2, lon2) {
@@ -113,14 +122,37 @@ export default function Maps() {
       // Default price for clustering, can be customized
       let price = 2000;
       try {
+        // First fetch all properties to ensure we have complete data
+        const fullPropertyRes = await fetch('https://rentify-server-ge0f.onrender.com/api/properties');
+        const allProperties = await fullPropertyRes.json();
+
+        // Then get ML recommendations
         const res = await fetch('https://ml-rentify.onrender.com/ml', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ mode: 'kmeans', price, ...location.coords }),
         });
-        const data = await res.json();
-        if (Array.isArray(data)) setMlProperties(data);
+        const mlData = await res.json();
+        
+        if (Array.isArray(mlData)) {
+          // Merge ML recommendations with full property data
+          const enrichedData = mlData.map(mlItem => {
+            // Find the complete property data
+            const fullProperty = allProperties.find(p => p._id === mlItem._id);
+            if (fullProperty) {
+              return {
+                ...fullProperty, // This includes all property data including images
+                cluster: mlItem.cluster,
+                location: fullProperty.location || mlItem.location
+              };
+            }
+            return mlItem;
+          });
+          console.log('Enriched data:', enrichedData[0]); // Debug log
+          setMlProperties(enrichedData);
+        }
       } catch (error) {
+        console.error('Error fetching data:', error); // Debug log
         Alert.alert('ML API error', error.message || 'Failed to fetch clustered properties');
       }
       setLoadingML(false);
@@ -195,27 +227,63 @@ export default function Maps() {
   // console.log('mlProperties:', mlProperties);
   // console.log('filteredProperties:', filteredProperties);
 
+  const toggleExpand = () => {
+    setIsExpanded(!isExpanded);
+    Animated.spring(expandAnim, {
+      toValue: isExpanded ? 0 : 1,
+      useNativeDriver: true,
+      tension: 50,
+      friction: 7
+    }).start();
+  };
+
   return (
     <View style={styles.container}>
-      {/* Cluster Filter Buttons */}
+      {/* Modern Header */}
+      <BlurView intensity={80} tint="light" style={styles.header}>
+        <Text style={styles.headerTitle}>Property Map</Text>
+        <TouchableOpacity 
+          style={styles.filterButton}
+          onPress={() => setShowFilters(!showFilters)}
+        >
+          <Ionicons name="options-outline" size={24} color={COLORS.primary} />
+        </TouchableOpacity>
+      </BlurView>
+
+      {/* Cluster Filter Buttons with modern design */}
       <View style={styles.clusterButtonRow}>
         {clusterNames.map((name, idx) => (
           <TouchableOpacity
             key={name}
-            style={[styles.clusterButton, selectedCluster === idx && { backgroundColor: clusterColors[idx], elevation: 5 }]}
+            style={[
+              styles.clusterButton,
+              selectedCluster === idx && { 
+                backgroundColor: clusterColors[idx],
+                transform: [{ scale: 1.05 }]
+              }
+            ]}
             onPress={() => setSelectedCluster(idx)}
             activeOpacity={0.85}
           >
-            <Text style={[styles.clusterButtonText, selectedCluster === idx && { color: '#fff' }]}>{name}</Text>
+            <Ionicons 
+              name={idx === 0 ? "cash-outline" : idx === 1 ? "home-outline" : "diamond-outline"} 
+              size={16} 
+              color={selectedCluster === idx ? '#fff' : '#333'} 
+              style={{ marginRight: 6 }}
+            />
+            <Text style={[styles.clusterButtonText, selectedCluster === idx && { color: '#fff' }]}>
+              {name}
+            </Text>
           </TouchableOpacity>
         ))}
       </View>
 
-      {/* Loading indicator */}
+      {/* Loading indicator with modern design */}
       {loadingML && (
-        <View style={{ position: 'absolute', top: '50%', left: '50%', zIndex: 99, marginLeft: -50, marginTop: -30, backgroundColor: 'rgba(0,0,0,0.5)', padding: 20, borderRadius: 10 }}>
-          <Text style={{ color: '#fff', fontWeight: 'bold' }}>Loading clusters...</Text>
-        </View>
+        <BlurView intensity={80} tint="light" style={styles.loadingContainer}>
+          <Ionicons name="sync" size={24} color={COLORS.primary} style={styles.loadingIcon} />
+          <Text style={styles.loadingText}>Loading clusters...</Text>
+        </BlurView>
       )}
 
       {/* No clusters found */}
@@ -235,6 +303,7 @@ export default function Maps() {
       <MapView
         ref={mapRef}
         style={StyleSheet.absoluteFill}
+        provider={PROVIDER_GOOGLE}
         initialRegion={{
           latitude: 13.6218,
           longitude: 123.1948,
@@ -244,6 +313,18 @@ export default function Maps() {
         showsUserLocation={true}
         showsMyLocationButton={true}
         zoomEnabled={true}
+        customMapStyle={[
+          {
+            "featureType": "all",
+            "elementType": "geometry",
+            "stylers": [{"color": "#f5f5f5"}]
+          },
+          {
+            "featureType": "water",
+            "elementType": "geometry",
+            "stylers": [{"color": "#e9e9e9"}, {"lightness": 17}]
+          }
+        ]}
       >
         {location && (
           <Marker
@@ -276,40 +357,111 @@ export default function Maps() {
         )}
       </MapView>
 
-      {/* Distance & ETA always visible at top */}
+      {/* Modern Property Card with Animation */}
+      {selectedProperty && (
+        <Animated.View 
+          style={[
+            styles.propertyCard,
+            {
+              transform: [{
+                translateY: expandAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, -200]
+                })
+              }]
+            }
+          ]}
+        >
+          <TouchableOpacity style={styles.expandButton} onPress={toggleExpand}>
+            <Ionicons 
+              name={isExpanded ? "chevron-down" : "chevron-up"} 
+              size={24} 
+              color={COLORS.primary} 
+            />
+          </TouchableOpacity>
+          
+          <ScrollView style={styles.propertyCardScroll} showsVerticalScrollIndicator={false}>
+            <View style={styles.propertyCardContent}>
+              <Image
+                source={{ uri: getImageUri(selectedProperty) }}
+                style={styles.propertyImage}
+                resizeMode="cover"
+              />
+              <View style={styles.propertyInfo}>
+                <Text style={styles.propertyTitle}>{selectedProperty.name}</Text>
+                <Text style={styles.propertyPrice}>₱{selectedProperty.price}/month</Text>
+                <Text style={styles.propertyType}>{selectedProperty.propertyType || ''}</Text>
+                <Text style={styles.propertyAddress}>{selectedProperty.location?.address}</Text>
+                
+                {isExpanded && (
+                  <View style={styles.expandedInfo}>
+                    <Text style={styles.description} numberOfLines={3}>{selectedProperty.description}</Text>
+                    {selectedProperty.amenities && (
+                      <View style={styles.amenitiesContainer}>
+                        <Text style={styles.amenitiesTitle}>Amenities</Text>
+                        <View style={styles.amenitiesGrid}>
+                          {selectedProperty.amenities.map((item, index) => (
+                            <View key={index} style={styles.amenityTag}>
+                              <Ionicons name="checkmark-circle" size={16} color={COLORS.primary} />
+                              <Text style={styles.amenityText}>{item}</Text>
+                            </View>
+                          ))}
+                        </View>
+                      </View>
+                    )}
+                    <View style={styles.sheetActions}>
+                      <TouchableOpacity 
+                        style={[styles.modernContactButton, { flex: 1, marginRight: 8 }]} 
+                        onPress={() => alert(`Contact ${selectedProperty.postedBy || 'owner'}`)}
+                      >
+                        <Ionicons name="call-outline" size={20} color={COLORS.primary} style={{ marginRight: 8 }} />
+                        <Text style={styles.modernContactButtonText}>Contact</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        style={[styles.modernRentButton, { flex: 1 }]} 
+                        onPress={() => alert(`You chose to rent: ${selectedProperty.name}`)}
+                      >
+                        <Ionicons name="home-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
+                        <Text style={styles.modernRentButtonText}>Rent</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+              </View>
+            </View>
+          </ScrollView>
+          
+          <TouchableOpacity 
+            style={styles.closeButton} 
+            onPress={() => {
+              setSelectedProperty(null);
+              setIsExpanded(false);
+            }}
+          >
+            <Ionicons name="close" size={20} color="#fff" />
+          </TouchableOpacity>
+        </Animated.View>
+      )}
+
+      {/* Modern Refresh Button */}
+      <TouchableOpacity 
+        style={styles.refreshButton}
+        onPress={() => setRefresh(!refresh)}
+      >
+        <Ionicons name="refresh" size={24} color="#fff" />
+      </TouchableOpacity>
+
+      {/* Distance & ETA Info Box */}
       {distance && duration && selectedProperty && (
-        <BlurView intensity={50} tint="light" style={styles.infoBoxTop}>
-          <Text style={styles.infoText}>
-            Distance to {selectedProperty.name}: {distance.toFixed(2)} km | ETA: {duration.toFixed(1)} mins
-          </Text>
+        <BlurView intensity={80} tint="light" style={styles.infoBox}>
+          <View style={styles.infoContent}>
+            <Ionicons name="navigate" size={20} color={COLORS.primary} />
+            <Text style={styles.infoText}>
+              {distance.toFixed(2)} km • {duration.toFixed(1)} mins
+            </Text>
+          </View>
         </BlurView>
       )}
-
-      {/* Modern Property Card Overlay with Real Image */}
-      {selectedProperty && (
-        <View style={styles.propertyCardSmall}>
-          <Image
-            source={selectedProperty?.images && selectedProperty.images[0]
-              ? { uri: getImageUri(selectedProperty) }
-              : require('../../assets/images/houseView.png')}
-            style={styles.propertyImageSmall}
-            resizeMode="cover"
-          />
-          <View style={styles.propertyInfoSmall}>
-            <Text style={styles.propertyTitle}>{selectedProperty.name}</Text>
-            <Text style={styles.propertyPrice}>₱{selectedProperty.price}</Text>
-            <Text style={styles.propertyType}>{selectedProperty.propertyType || ''}</Text>
-            <Text style={styles.propertyAddress}>{selectedProperty.location?.address}</Text>
-          </View>
-          <TouchableOpacity style={styles.closeButtonModern} onPress={() => setSelectedProperty(null)}>
-            <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 20 }}>×</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      <TouchableOpacity style={styles.refreshButton} onPress={() => setRefresh(!refresh)}>
-        <Text style={styles.refreshButtonText}>⟳ Refresh Map</Text>
-      </TouchableOpacity>
 
       {!isLocationPermissionGranted && (
         <View style={styles.permissionView}>
@@ -325,24 +477,35 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f6f8fa',
   },
-  infoBoxTop: {
+  header: {
     position: 'absolute',
-    top: 110,
-    alignSelf: 'center',
-    width: '90%',
-    padding: 16,
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 60,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    zIndex: 100,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.primary,
+  },
+  filterButton: {
+    padding: 8,
     borderRadius: 20,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    zIndex: 20,
+    backgroundColor: 'rgba(255,255,255,0.9)',
   },
   clusterButtonRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
-    marginTop: 50,
+    marginTop: 70,
     marginBottom: 8,
     zIndex: 10,
     position: 'absolute',
@@ -350,10 +513,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   clusterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#fff',
     borderRadius: 20,
     paddingVertical: 8,
-    paddingHorizontal: 18,
+    paddingHorizontal: 16,
     marginHorizontal: 4,
     shadowColor: '#000',
     shadowOpacity: 0.1,
@@ -365,122 +530,234 @@ const styles = StyleSheet.create({
   },
   clusterButtonText: {
     color: '#333',
-    fontWeight: 'bold',
-    fontSize: 15,
+    fontWeight: '600',
+    fontSize: 14,
   },
-  propertyCardSmall: {
+  filterPanel: {
+    display: 'none',
+  },
+  loadingContainer: {
     position: 'absolute',
-    bottom: 110,
-    left: 20,
-    right: 20,
-    backgroundColor: '#fff',
-    borderRadius: 18,
+    top: '50%',
+    left: '50%',
+    transform: [{ translateX: -100 }, { translateY: -30 }],
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    padding: 20,
+    borderRadius: 20,
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
+    zIndex: 99,
+  },
+  loadingIcon: {
+    marginRight: 10,
+  },
+  loadingText: {
+    color: COLORS.primary,
+    fontWeight: 'bold',
+  },
+  propertyCard: {
+    position: 'absolute',
+    bottom: 80,
+    left: 0,
+    right: 0,
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 16,
     shadowColor: '#000',
-    shadowOpacity: 0.18,
+    shadowOpacity: 0.1,
     shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: -4 },
     elevation: 8,
     zIndex: 20,
-    overflow: 'hidden',
+    maxHeight: '60%',
   },
-  propertyImageSmall: {
-    width: 64,
-    height: 64,
-    borderRadius: 12,
-    marginRight: 14,
-    backgroundColor: '#eee',
-  },
-  propertyInfoSmall: {
+  propertyCardScroll: {
     flex: 1,
   },
-
-  closeButtonModern: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    backgroundColor: '#E91E63',
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+  expandButton: {
+    alignSelf: 'center',
+    padding: 8,
+    marginBottom: 8,
+    backgroundColor: '#f8f8f8',
+    borderRadius: 20,
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    alignSelf: 'center',
-    elevation: 2,
-    zIndex: 30,
   },
-
+  propertyCardContent: {
+    flexDirection: 'row',
+    paddingBottom: 16,
+  },
+  propertyImage: {
+    width: 120,
+    height: 120,
+    borderRadius: 16,
+    marginRight: 16,
+  },
   propertyInfo: {
     flex: 1,
   },
   propertyTitle: {
+    fontSize: 18,
     fontWeight: 'bold',
-    fontSize: 16,
     color: '#222',
+    marginBottom: 4,
   },
   propertyPrice: {
-    fontSize: 15,
-    color: '#4CAF50',
+    fontSize: 16,
+    color: COLORS.primary,
     fontWeight: 'bold',
-    marginTop: 2,
+    marginBottom: 4,
   },
   propertyType: {
-    fontSize: 13,
-    color: '#757575',
-    marginTop: 2,
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
   },
   propertyAddress: {
-    fontSize: 12,
-    color: '#aaa',
-    marginTop: 2,
+    fontSize: 13,
+    color: '#999',
+  },
+  expandedInfo: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+  },
+  description: {
+    fontSize: 14,
+    color: '#666',
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  amenitiesContainer: {
+    marginVertical: 8,
+  },
+  amenitiesTitle: {
+    fontWeight: 'bold',
+    marginBottom: 8,
+    fontSize: 16,
+    color: COLORS.primary,
+  },
+  amenitiesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  amenityTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8f8f8',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  amenityText: {
+    fontSize: 14,
+    color: '#444',
+    marginLeft: 6,
+  },
+  sheetActions: {
+    marginTop: 12,
+    marginBottom: 8,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  modernContactButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+    borderRadius: 20,
+    paddingVertical: 10,
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.13,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  modernContactButtonText: {
+    color: COLORS.primary,
+    fontWeight: 'bold',
+    fontSize: 14,
+    letterSpacing: 0.3,
+  },
+  modernRentButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.primary,
+    borderRadius: 20,
+    paddingVertical: 10,
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.15,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  modernRentButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 14,
+    letterSpacing: 0.3,
   },
   closeButton: {
-    backgroundColor: '#E91E63',
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    backgroundColor: COLORS.primary,
     width: 28,
     height: 28,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 10,
     elevation: 2,
   },
   refreshButton: {
     position: 'absolute',
-    bottom: 38,
+    bottom: 20,
     right: 20,
-    backgroundColor: '#222',
-    borderRadius: 20,
-    paddingVertical: 10,
-    paddingHorizontal: 18,
-    elevation: 3,
+    backgroundColor: COLORS.primary,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 4,
     shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-  },
-  refreshButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 15,
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
   },
   infoBox: {
     position: 'absolute',
-    bottom: 100,
+    top: 130,
     alignSelf: 'center',
     width: '90%',
-    padding: 16,
+    padding: 12,
     borderRadius: 20,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.3)',
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    zIndex: 20,
+  },
+  infoContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   infoText: {
     fontSize: 14,
-    fontWeight: 'bold',
-    color: 'white',
+    fontWeight: '600',
+    color: COLORS.primary,
+    marginLeft: 8,
   },
   permissionView: {
     position: 'absolute',

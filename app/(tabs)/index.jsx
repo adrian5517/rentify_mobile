@@ -99,7 +99,23 @@ if (profilePicture.includes('api.dicebear.com') && profilePicture.includes('/svg
     });
     const data = await res.json();
     if (Array.isArray(data)) {
-      setMlRecommended(data);
+      // Ensure we have the complete property data with images
+      const mlWithFullData = data.map(mlItem => {
+        const fullProperty = properties.find(p => p._id === mlItem._id);
+        if (fullProperty) {
+          return {
+            ...fullProperty,
+            images: fullProperty.images || [],
+            location: fullProperty.location || mlItem.location
+          };
+        }
+        return {
+          ...mlItem,
+          images: mlItem.images || [],
+          location: mlItem.location || {}
+        };
+      });
+      setMlRecommended(mlWithFullData);
       setShowML(true);
     }
     setLoadingML(false);
@@ -119,6 +135,13 @@ if (profilePicture.includes('api.dicebear.com') && profilePicture.includes('/svg
     }
     if (minPrice) filtered = filtered.filter(p => p.price >= parseInt(minPrice));
     if (maxPrice) filtered = filtered.filter(p => p.price <= parseInt(maxPrice));
+    
+    // Reset ML recommendations when price filters are cleared
+    if (!minPrice && !maxPrice && showML) {
+      setShowML(false);
+      setMlRecommended([]);
+    }
+    
     if (showML) {
       const mlOnly = mlRecommended.filter(ml => !filtered.some(p => p._id === ml._id));
       setFilteredProperties([...mlOnly, ...filtered]);
@@ -151,8 +174,10 @@ if (profilePicture.includes('api.dicebear.com') && profilePicture.includes('/svg
   };
 
   const getImageUri = (property) => {
-    const path = property?.images?.[0];
-    return path?.startsWith('http') ? path : `https://rentify-server-ge0f.onrender.com${path?.startsWith('/') ? path : '/' + path}`;
+    if (!property?.images?.length) return 'https://via.placeholder.com/400x300?text=No+Image';
+    const path = property.images[0];
+    if (!path) return 'https://via.placeholder.com/400x300?text=No+Image';
+    return path.startsWith('http') ? path : `https://rentify-server-ge0f.onrender.com${path.startsWith('/') ? path : '/' + path}`;
   };
 
   const renderPropertyCard = ({ item }) => (
@@ -300,11 +325,18 @@ if (profilePicture.includes('api.dicebear.com') && profilePicture.includes('/svg
             style={[styles.sheetModal, { transform: [{ translateY: slideAnim }] }]}
             {...panResponder.panHandlers}
           >
-            <TouchableOpacity onPress={handleCloseModal} style={styles.sheetCloseBtn} accessibilityLabel="Close property details">
-              <Ionicons name="close" size={28} color={COLORS.primary} />
-            </TouchableOpacity>
+            <View style={styles.modalHeader}>
+              <View style={styles.modalHandle} />
+              <TouchableOpacity 
+                onPress={handleCloseModal} 
+                style={styles.sheetCloseBtn} 
+                accessibilityLabel="Close property details"
+              >
+                <Ionicons name="close" size={28} color={COLORS.primary} />
+              </TouchableOpacity>
+            </View>
             {selectedProperty && (
-              <ScrollView showsVerticalScrollIndicator={false}>
+              <ScrollView showsVerticalScrollIndicator={false} style={styles.modalScrollContent}>
                 <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}>
                   {selectedProperty.images?.map((img, i) => (
                     <Image
@@ -708,21 +740,40 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
     padding: 18,
-    minHeight: 420,
+    height: '90%',
     elevation: 16,
     shadowColor: COLORS.primary,
     shadowOpacity: 0.18,
     shadowOffset: { width: 0, height: -2 },
     shadowRadius: 24,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
+    marginBottom: 10,
+    position: 'relative',
+    paddingTop: 8,
+  },
+  modalHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: '#e0e0e0',
+    borderRadius: 2,
+    marginBottom: 8,
   },
   sheetCloseBtn: {
-    alignSelf: 'center',
-    marginBottom: 10,
+    position: 'absolute',
+    right: 0,
+    top: 8,
     backgroundColor: '#e1e1e1',
     borderRadius: 20,
     padding: 8,
-    marginTop: 6,
+    zIndex: 1,
+  },
+  modalScrollContent: {
+    flex: 1,
+    paddingBottom: 20,
   },
   sheetImage: {
     width: Dimensions.get('window').width - 36,
