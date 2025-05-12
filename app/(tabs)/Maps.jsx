@@ -34,12 +34,16 @@ export default function Maps() {
   const [selectedProperty, setSelectedProperty] = useState(null);
   const [isLocationPermissionGranted, setIsLocationPermissionGranted] = useState(false);
   const [refresh, setRefresh] = useState(false);
-  const [selectedCluster, setSelectedCluster] = useState(0); // 0: Low, 1: Mid, 2: High
+  const [selectedCluster, setSelectedCluster] = useState(0);
   const [loadingML, setLoadingML] = useState(false);
   const mapRef = useRef(null);
   const [isExpanded, setIsExpanded] = useState(false);
   const expandAnim = useRef(new Animated.Value(0)).current;
   const [showFilters, setShowFilters] = useState(false);
+  const [navigationMode, setNavigationMode] = useState(false);
+  const [currentStep, setCurrentStep] = useState(0);
+  const [routeSteps, setRouteSteps] = useState([]);
+  const slideAnim = useRef(new Animated.Value(0)).current;
 
   // Helper to calculate bearing from user to a property
   function getBearing(lat1, lon1, lat2, lon2) {
@@ -237,17 +241,107 @@ export default function Maps() {
     }).start();
   };
 
+  // Function to get turn-by-turn directions
+  const getTurnByTurnDirections = async (start, end) => {
+    try {
+      const response = await directionsClient
+        .getDirections({
+          profile: 'driving',
+          geometries: 'geojson',
+          steps: true,
+          waypoints: [
+            { coordinates: [start.longitude, start.latitude] },
+            { coordinates: [end.longitude, end.latitude] },
+          ],
+        })
+        .send();
+
+      const route = response.body.routes[0];
+      const steps = route.legs[0].steps.map(step => ({
+        instruction: step.maneuver.instruction,
+        distance: step.distance,
+        duration: step.duration,
+        type: step.maneuver.type,
+        modifier: step.maneuver.modifier,
+        coordinates: step.geometry.coordinates
+      }));
+
+      setRouteSteps(steps);
+      setCurrentStep(0);
+      return steps;
+    } catch (error) {
+      console.error('Error getting directions:', error);
+      return [];
+    }
+  };
+
+  // Function to handle property selection
+  const handlePropertySelect = async (property) => {
+    setSelectedProperty(property);
+    setIsExpanded(false);
+    expandAnim.setValue(0);
+  };
+
+  // Function to start navigation
+  const startNavigation = async () => {
+    if (location && selectedProperty?.location) {
+      const steps = await getTurnByTurnDirections(
+        { latitude: location.latitude, longitude: location.longitude },
+        { latitude: selectedProperty.location.latitude, longitude: selectedProperty.location.longitude }
+      );
+      if (steps.length > 0) {
+        setNavigationMode(true);
+        Animated.spring(slideAnim, {
+          toValue: 1,
+          useNativeDriver: true,
+          tension: 50,
+          friction: 7
+        }).start();
+      }
+    }
+  };
+
+  // Function to close navigation
+  const closeNavigation = () => {
+    Animated.spring(slideAnim, {
+      toValue: 0,
+      useNativeDriver: true,
+      tension: 50,
+      friction: 7
+    }).start(() => {
+      setNavigationMode(false);
+    });
+  };
+
+  // Function to get direction icon based on maneuver type
+  const getDirectionIcon = (type, modifier) => {
+    switch (type) {
+      case 'turn':
+        switch (modifier) {
+          case 'left': return 'arrow-back';
+          case 'right': return 'arrow-forward';
+          case 'slight left': return 'arrow-back-outline';
+          case 'slight right': return 'arrow-forward-outline';
+          case 'sharp left': return 'return-up-back';
+          case 'sharp right': return 'return-down-forward';
+          default: return 'arrow-forward';
+        }
+      case 'arrive':
+        return 'flag';
+      case 'depart':
+        return 'navigate';
+      case 'continue':
+        return 'arrow-forward';
+      default:
+        return 'navigate';
+    }
+  };
+
   return (
     <View style={styles.container}>
       {/* Modern Header */}
       <BlurView intensity={80} tint="light" style={styles.header}>
         <Text style={styles.headerTitle}>Property Map</Text>
-        <TouchableOpacity 
-          style={styles.filterButton}
-          onPress={() => setShowFilters(!showFilters)}
-        >
-          <Ionicons name="options-outline" size={24} color={COLORS.primary} />
-        </TouchableOpacity>
       </BlurView>
 
       {/* Cluster Filter Buttons with modern design */}
@@ -323,6 +417,86 @@ export default function Maps() {
             "featureType": "water",
             "elementType": "geometry",
             "stylers": [{"color": "#e9e9e9"}, {"lightness": 17}]
+          },
+          {
+            "featureType": "road",
+            "elementType": "geometry",
+            "stylers": [{"color": "#ffffff"}]
+          },
+          {
+            "featureType": "road.highway",
+            "elementType": "geometry",
+            "stylers": [{"color": "#fafafa"}]
+          },
+          {
+            "featureType": "road.highway",
+            "elementType": "geometry.stroke",
+            "stylers": [{"color": "#f5f5f5"}]
+          },
+          {
+            "featureType": "road.arterial",
+            "elementType": "geometry",
+            "stylers": [{"color": "#fafafa"}]
+          },
+          {
+            "featureType": "road.local",
+            "elementType": "geometry",
+            "stylers": [{"color": "#ffffff"}]
+          },
+          {
+            "featureType": "poi",
+            "elementType": "geometry",
+            "stylers": [{"color": "#f5f5f5"}]
+          },
+          {
+            "featureType": "poi.park",
+            "elementType": "geometry",
+            "stylers": [{"color": "#dedede"}]
+          },
+          {
+            "featureType": "poi.park",
+            "elementType": "labels.text.fill",
+            "stylers": [{"color": "#6b9a76"}]
+          },
+          {
+            "featureType": "poi.business",
+            "elementType": "geometry",
+            "stylers": [{"color": "#f5f5f5"}]
+          },
+          {
+            "featureType": "transit",
+            "elementType": "geometry",
+            "stylers": [{"color": "#f5f5f5"}]
+          },
+          {
+            "featureType": "transit.station",
+            "elementType": "geometry",
+            "stylers": [{"color": "#dedede"}]
+          },
+          {
+            "featureType": "administrative",
+            "elementType": "geometry.stroke",
+            "stylers": [{"color": "#bdbdbd"}]
+          },
+          {
+            "featureType": "administrative.land_parcel",
+            "elementType": "geometry.stroke",
+            "stylers": [{"color": "#bdbdbd"}]
+          },
+          {
+            "featureType": "administrative.locality",
+            "elementType": "geometry.stroke",
+            "stylers": [{"color": "#bdbdbd"}]
+          },
+          {
+            "featureType": "landscape",
+            "elementType": "geometry",
+            "stylers": [{"color": "#f5f5f5"}]
+          },
+          {
+            "featureType": "landscape.natural",
+            "elementType": "geometry",
+            "stylers": [{"color": "#f5f5f5"}]
           }
         ]}
       >
@@ -347,17 +521,22 @@ export default function Maps() {
               title={property.name}
               description={`₱${property.price} | ${property.propertyType || ''}`}
               pinColor={clusterColors[selectedCluster]}
-              onPress={() => setSelectedProperty(property)}
+              onPress={() => handlePropertySelect(property)}
             />
           )
         ))}
 
         {routeCoords.length > 0 && (
-          <Polyline coordinates={routeCoords} strokeWidth={4} strokeColor="blue" />
+          <Polyline 
+            coordinates={routeCoords} 
+            strokeWidth={4} 
+            strokeColor={COLORS.primary}
+            lineDashPattern={[1]}
+          />
         )}
       </MapView>
 
-      {/* Modern Property Card with Animation */}
+      {/* Property Card */}
       {selectedProperty && (
         <Animated.View 
           style={[
@@ -396,19 +575,6 @@ export default function Maps() {
                 {isExpanded && (
                   <View style={styles.expandedInfo}>
                     <Text style={styles.description} numberOfLines={3}>{selectedProperty.description}</Text>
-                    {selectedProperty.amenities && (
-                      <View style={styles.amenitiesContainer}>
-                        <Text style={styles.amenitiesTitle}>Amenities</Text>
-                        <View style={styles.amenitiesGrid}>
-                          {selectedProperty.amenities.map((item, index) => (
-                            <View key={index} style={styles.amenityTag}>
-                              <Ionicons name="checkmark-circle" size={16} color={COLORS.primary} />
-                              <Text style={styles.amenityText}>{item}</Text>
-                            </View>
-                          ))}
-                        </View>
-                      </View>
-                    )}
                     <View style={styles.sheetActions}>
                       <TouchableOpacity 
                         style={[styles.modernContactButton, { flex: 1, marginRight: 8 }]} 
@@ -425,6 +591,13 @@ export default function Maps() {
                         <Text style={styles.modernRentButtonText}>Rent</Text>
                       </TouchableOpacity>
                     </View>
+                    <TouchableOpacity 
+                      style={styles.navigationButton}
+                      onPress={startNavigation}
+                    >
+                      <Ionicons name="navigate" size={24} color="#fff" style={{ marginRight: 8 }} />
+                      <Text style={styles.navigationButtonText}>Get Directions</Text>
+                    </TouchableOpacity>
                   </View>
                 )}
               </View>
@@ -440,6 +613,77 @@ export default function Maps() {
           >
             <Ionicons name="close" size={20} color="#fff" />
           </TouchableOpacity>
+        </Animated.View>
+      )}
+
+      {/* Navigation Modal */}
+      {navigationMode && (
+        <Animated.View 
+          style={[
+            styles.navigationModal,
+            {
+              transform: [{
+                translateY: slideAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [300, 0]
+                })
+              }]
+            }
+          ]}
+        >
+          <View style={styles.navigationHeader}>
+            <Text style={styles.navigationTitle}>Turn-by-Turn Navigation</Text>
+            <TouchableOpacity 
+              style={styles.closeNavigationButton}
+              onPress={closeNavigation}
+            >
+              <Ionicons name="close" size={24} color={COLORS.primary} />
+            </TouchableOpacity>
+          </View>
+          
+          <View style={styles.currentStepContainer}>
+            <Ionicons 
+              name={getDirectionIcon(routeSteps[currentStep].type, routeSteps[currentStep].modifier)} 
+              size={32} 
+              color={COLORS.primary} 
+            />
+            <View style={styles.stepInfo}>
+              <Text style={styles.stepInstruction}>{routeSteps[currentStep].instruction}</Text>
+              <Text style={styles.stepDistance}>
+                {Math.round(routeSteps[currentStep].distance)}m • {Math.round(routeSteps[currentStep].duration)}s
+              </Text>
+            </View>
+          </View>
+
+          <ScrollView 
+            style={styles.stepsList}
+            contentContainerStyle={styles.stepsListContent}
+            bounces={false}
+            showsVerticalScrollIndicator={true}
+          >
+            {routeSteps.map((step, index) => (
+              <TouchableOpacity
+                key={index}
+                style={[
+                  styles.stepItem,
+                  index === currentStep && styles.currentStepItem
+                ]}
+                onPress={() => setCurrentStep(index)}
+              >
+                <Ionicons 
+                  name={getDirectionIcon(step.type, step.modifier)} 
+                  size={20} 
+                  color={index === currentStep ? '#fff' : COLORS.primary} 
+                />
+                <Text style={[
+                  styles.stepItemText,
+                  index === currentStep && styles.currentStepText
+                ]}>
+                  {step.instruction}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </Animated.View>
       )}
 
@@ -485,7 +729,7 @@ const styles = StyleSheet.create({
     height: 60,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     paddingHorizontal: 20,
     zIndex: 100,
     borderBottomWidth: 1,
@@ -495,11 +739,6 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     color: COLORS.primary,
-  },
-  filterButton: {
-    padding: 8,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.9)',
   },
   clusterButtonRow: {
     flexDirection: 'row',
@@ -570,7 +809,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: -4 },
     elevation: 8,
     zIndex: 20,
-    maxHeight: '60%',
+    maxHeight: '70%',
   },
   propertyCardScroll: {
     flex: 1,
@@ -631,35 +870,6 @@ const styles = StyleSheet.create({
     color: '#666',
     lineHeight: 20,
     marginBottom: 12,
-  },
-  amenitiesContainer: {
-    marginVertical: 8,
-  },
-  amenitiesTitle: {
-    fontWeight: 'bold',
-    marginBottom: 8,
-    fontSize: 16,
-    color: COLORS.primary,
-  },
-  amenitiesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  amenityTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f8f8f8',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    marginRight: 8,
-    marginBottom: 8,
-  },
-  amenityText: {
-    fontSize: 14,
-    color: '#444',
-    marginLeft: 6,
   },
   sheetActions: {
     marginTop: 12,
@@ -772,5 +982,107 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 18,
     textAlign: 'center',
+  },
+  navigationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.primary,
+    borderRadius: 20,
+    paddingVertical: 12,
+    marginTop: 12,
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.15,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  navigationButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
+    letterSpacing: 0.3,
+  },
+  navigationModal: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 16,
+    height: '85%',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    zIndex: 100,
+  },
+  navigationHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  navigationTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.primary,
+  },
+  closeNavigationButton: {
+    padding: 4,
+  },
+  currentStepContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8f8f8',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+  },
+  stepInfo: {
+    marginLeft: 16,
+    flex: 1,
+  },
+  stepInstruction: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+  },
+  stepDistance: {
+    fontSize: 14,
+    color: '#666',
+  },
+  stepsList: {
+    flex: 1,
+  },
+  stepsListContent: {
+    paddingBottom: 20,
+  },
+  stepItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+    backgroundColor: '#f8f8f8',
+  },
+  currentStepItem: {
+    backgroundColor: COLORS.primary,
+  },
+  stepItemText: {
+    marginLeft: 12,
+    fontSize: 14,
+    color: '#333',
+    flex: 1,
+  },
+  currentStepText: {
+    color: '#fff',
   },
 });
