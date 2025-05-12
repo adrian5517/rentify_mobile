@@ -407,98 +407,8 @@ export default function Maps() {
         showsUserLocation={true}
         showsMyLocationButton={true}
         zoomEnabled={true}
-        customMapStyle={[
-          {
-            "featureType": "all",
-            "elementType": "geometry",
-            "stylers": [{"color": "#f5f5f5"}]
-          },
-          {
-            "featureType": "water",
-            "elementType": "geometry",
-            "stylers": [{"color": "#e9e9e9"}, {"lightness": 17}]
-          },
-          {
-            "featureType": "road",
-            "elementType": "geometry",
-            "stylers": [{"color": "#ffffff"}]
-          },
-          {
-            "featureType": "road.highway",
-            "elementType": "geometry",
-            "stylers": [{"color": "#fafafa"}]
-          },
-          {
-            "featureType": "road.highway",
-            "elementType": "geometry.stroke",
-            "stylers": [{"color": "#f5f5f5"}]
-          },
-          {
-            "featureType": "road.arterial",
-            "elementType": "geometry",
-            "stylers": [{"color": "#fafafa"}]
-          },
-          {
-            "featureType": "road.local",
-            "elementType": "geometry",
-            "stylers": [{"color": "#ffffff"}]
-          },
-          {
-            "featureType": "poi",
-            "elementType": "geometry",
-            "stylers": [{"color": "#f5f5f5"}]
-          },
-          {
-            "featureType": "poi.park",
-            "elementType": "geometry",
-            "stylers": [{"color": "#dedede"}]
-          },
-          {
-            "featureType": "poi.park",
-            "elementType": "labels.text.fill",
-            "stylers": [{"color": "#6b9a76"}]
-          },
-          {
-            "featureType": "poi.business",
-            "elementType": "geometry",
-            "stylers": [{"color": "#f5f5f5"}]
-          },
-          {
-            "featureType": "transit",
-            "elementType": "geometry",
-            "stylers": [{"color": "#f5f5f5"}]
-          },
-          {
-            "featureType": "transit.station",
-            "elementType": "geometry",
-            "stylers": [{"color": "#dedede"}]
-          },
-          {
-            "featureType": "administrative",
-            "elementType": "geometry.stroke",
-            "stylers": [{"color": "#bdbdbd"}]
-          },
-          {
-            "featureType": "administrative.land_parcel",
-            "elementType": "geometry.stroke",
-            "stylers": [{"color": "#bdbdbd"}]
-          },
-          {
-            "featureType": "administrative.locality",
-            "elementType": "geometry.stroke",
-            "stylers": [{"color": "#bdbdbd"}]
-          },
-          {
-            "featureType": "landscape",
-            "elementType": "geometry",
-            "stylers": [{"color": "#f5f5f5"}]
-          },
-          {
-            "featureType": "landscape.natural",
-            "elementType": "geometry",
-            "stylers": [{"color": "#f5f5f5"}]
-          }
-        ]}
+        moveOnMarkerPress={false}
+        tracksViewChanges={false}
       >
         {location && (
           <Marker
@@ -507,6 +417,7 @@ export default function Maps() {
               longitude: location.longitude,
             }}
             image={Person}
+            tracksViewChanges={false}
           />
         )}
 
@@ -522,6 +433,7 @@ export default function Maps() {
               description={`₱${property.price} | ${property.propertyType || ''}`}
               pinColor={clusterColors[selectedCluster]}
               onPress={() => handlePropertySelect(property)}
+              tracksViewChanges={false}
             />
           )
         ))}
@@ -532,6 +444,7 @@ export default function Maps() {
             strokeWidth={4} 
             strokeColor={COLORS.primary}
             lineDashPattern={[1]}
+            tracksViewChanges={false}
           />
         )}
       </MapView>
