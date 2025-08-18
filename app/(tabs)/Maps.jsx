@@ -12,7 +12,7 @@ import COLORS from '../../constant/colors';
 const Person = require('../../assets/images/personView.png');
 const House = require('../../assets/images/houseView.png');
 
-const MAPBOX_TOKEN = 'pk.eyJ1IjoiYWRyaWFuNTUxNyIsImEiOiJjbTlyMHpubjYxcG9lMmtwdDVtc3FtaXRxIn0.6Qx1Pf_dIOCfRB7n7tWl1g';
+const MAPBOX_TOKEN = 'pk.eyJ1IjoiYWRyaWFuNTUxNyIsImEiOiJjbWVoYjVrYzIwNTI3MmpzYzIyYzhpbTlxIn0.33wMUowKG_-xY-qe08KAYQ';
 const directionsClient = MapboxDirections({ accessToken: MAPBOX_TOKEN });
 
 const getImageUri = (property) => {
