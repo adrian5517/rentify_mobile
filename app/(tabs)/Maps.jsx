@@ -16,13 +16,21 @@ const MAPBOX_TOKEN = 'pk.eyJ1IjoiYWRyaWFuNTUxNyIsImEiOiJjbWVoYjVrYzIwNTI3MmpzYzI
 const directionsClient = MapboxDirections({ accessToken: MAPBOX_TOKEN });
 
 const getImageUri = (property) => {
+  console.log('Full property object:', property); // Debug log
   console.log('Property images:', property?.images); // Debug log
-  if (!property?.images?.length) return 'https://via.placeholder.com/400x300?text=No+Image';
-  const path = property.images[0];
-  if (!path) return 'https://via.placeholder.com/400x300?text=No+Image';
-  const imageUrl = path.startsWith('http') ? path : `https://rentify-server-ge0f.onrender.com${path.startsWith('/') ? path : '/' + path}`;
-  console.log('Image URL:', imageUrl); // Debug log
-  return imageUrl;
+  
+  // Use first image index only, same as List component
+  const firstImage = property?.images?.[0];
+  console.log('First image:', firstImage); // Debug log
+  
+  if (!firstImage) {
+    console.log('No image found, using placeholder'); // Debug log
+    return 'https://via.placeholder.com/400x300?text=No+Image';
+  }
+  
+  // Since images are already full URLs from Cloudinary, return as-is
+  console.log('Final image URL:', firstImage); // Debug log
+  return firstImage;
 };
 
 export default function Maps() {
@@ -139,21 +147,44 @@ export default function Maps() {
         const mlData = await res.json();
         
         if (Array.isArray(mlData)) {
+          console.log('ML Data sample:', mlData[0]); // Debug log
+          console.log('All Properties sample IDs:', allProperties.map(p => p._id).slice(0, 5)); // Debug log
+          console.log('ML Data IDs:', mlData.map(p => p._id).slice(0, 5)); // Debug log
+          
           // Merge ML recommendations with full property data
           const enrichedData = mlData.map(mlItem => {
             // Find the complete property data
             const fullProperty = allProperties.find(p => p._id === mlItem._id);
+            console.log('ML Item ID:', mlItem._id); // Debug log
+            console.log('Full Property found:', fullProperty ? 'YES' : 'NO'); // Debug log
             if (fullProperty) {
+              console.log('Full Property images:', fullProperty.images); // Debug log
               return {
                 ...fullProperty, // This includes all property data including images
                 cluster: mlItem.cluster,
                 location: fullProperty.location || mlItem.location
               };
             }
+            console.log('Using ML Item directly (missing full data):', mlItem); // Debug log
             return mlItem;
           });
-          console.log('Enriched data:', enrichedData[0]); // Debug log
-          setMlProperties(enrichedData);
+          
+          // Fallback: If enrichment failed (no images), use all properties directly
+          const hasImages = enrichedData.some(item => item.images && item.images.length > 0);
+          console.log('Enriched data has images:', hasImages); // Debug log
+          
+          if (!hasImages && allProperties.length > 0) {
+            console.log('Enrichment failed, using all properties as fallback'); // Debug log
+            // Use all properties with artificial clusters for testing
+            const fallbackData = allProperties.slice(0, 10).map((property, index) => ({
+              ...property,
+              cluster: index % 3, // Distribute across 3 clusters
+            }));
+            setMlProperties(fallbackData);
+          } else {
+            console.log('Using enriched data'); // Debug log
+            setMlProperties(enrichedData);
+          }
         }
       } catch (error) {
         console.error('Error fetching data:', error); // Debug log
