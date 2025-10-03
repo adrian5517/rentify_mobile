@@ -6,13 +6,13 @@ import {
   TouchableOpacity, 
   Image, 
   TextInput, 
-  SafeAreaView, 
   StyleSheet, 
   KeyboardAvoidingView,
   Platform,
   Keyboard,
   Dimensions 
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialIcons, Feather } from '@expo/vector-icons';
 
 const CHAT_DATA = [
