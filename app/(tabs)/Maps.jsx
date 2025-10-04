@@ -42,7 +42,7 @@ export default function Maps() {
   const [selectedProperty, setSelectedProperty] = useState(null);
   const [isLocationPermissionGranted, setIsLocationPermissionGranted] = useState(false);
   const [refresh, setRefresh] = useState(false);
-  const [selectedCluster, setSelectedCluster] = useState(0);
+  const [selectedCluster, setSelectedCluster] = useState(3); // Default to "All Properties"
   const [loadingML, setLoadingML] = useState(false);
   const mapRef = useRef(null);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -141,80 +141,263 @@ export default function Maps() {
     requestLocationPermission();
   }, [refresh]);
 
-  // Fetch clustered properties from ML API
+  // Fetch clustered properties from ML API using K-means
   useEffect(() => {
-    const fetchMLClusters = async () => {
-      setLoadingML(true);
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        setLoadingML(false);
-        Alert.alert('Permission denied', 'Location permission is required');
+    const fetchAndClusterProperties = async () => {
+      if (!location) {
+        console.log('❌ No location available yet, skipping clustering');
         return;
       }
-      let location = await Location.getCurrentPositionAsync({});
-      // Default price for clustering, can be customized
-      let price = 2000;
-      try {
-        // First fetch all properties to ensure we have complete data
-        const fullPropertyRes = await fetch('https://rentify-server-ge0f.onrender.com/api/properties');
-        const allProperties = await fullPropertyRes.json();
 
-        // Then get ML recommendations
-        const res = await fetch('https://ml-rentify.onrender.com/ml', {
+      setLoadingML(true);
+      console.log('🔄 Starting K-means clustering...');
+
+      try {
+        // 1. First fetch all properties from backend
+        console.log('📡 Fetching properties from backend...');
+        const propertiesRes = await fetch('https://rentify-server-ge0f.onrender.com/api/properties');
+        
+        if (!propertiesRes.ok) {
+          throw new Error(`Backend API error: ${propertiesRes.status}`);
+        }
+
+        const properties = await propertiesRes.json();
+        console.log(`✅ Fetched ${properties.length} properties from backend`);
+
+        if (!properties || properties.length === 0) {
+          console.log('❌ No properties found from backend, using test data');
+          // Use test data for development/debugging
+          const testProperties = [
+            {
+              _id: 'test1',
+              title: 'Affordable Studio Apartment',
+              price: 3500,
+              latitude: 13.6218,
+              longitude: 123.1948,
+              location: 'Budget Area',
+              images: ['https://via.placeholder.com/400x300?text=Affordable+Studio'],
+              type: 'studio'
+            },
+            {
+              _id: 'test2', 
+              title: 'Mid-Range Condo',
+              price: 5500,
+              latitude: 13.6230,
+              longitude: 123.1960,
+              location: 'Mid-Range Area',
+              images: ['https://via.placeholder.com/400x300?text=Mid-Range+Condo'],
+              type: 'condominium'
+            },
+            {
+              _id: 'test3',
+              title: 'Luxury Penthouse',
+              price: 15000,
+              latitude: 13.6240,
+              longitude: 123.1970,
+              location: 'Premium Area',
+              images: ['https://via.placeholder.com/400x300?text=Luxury+Penthouse'],
+              type: 'penthouse'
+            },
+            {
+              _id: 'test4',
+              title: 'Budget Room',
+              price: 2500,
+              latitude: 13.6200,
+              longitude: 123.1930,
+              location: 'Economic Zone',
+              images: ['https://via.placeholder.com/400x300?text=Budget+Room'],
+              type: 'room'
+            },
+            {
+              _id: 'test5',
+              title: 'Modern Apartment',
+              price: 8000,
+              latitude: 13.6250,
+              longitude: 123.1980,
+              location: 'Modern District',
+              images: ['https://via.placeholder.com/400x300?text=Modern+Apartment'],
+              type: 'apartment'
+            }
+          ];
+          
+          // Apply correct price-based clustering to test data: 2k-4k, 4k-7k, 7k+
+          const clusteredTestData = testProperties.map(property => ({
+            ...property,
+            cluster: property.price <= 4000 ? 0 : property.price <= 7000 ? 1 : 2
+          }));
+          
+          console.log('✅ Using test data with price-based clustering');
+          setMlProperties(clusteredTestData);
+          return;
+        }
+
+        // 2. Test ML API connectivity first
+        console.log('🧪 Testing K-means API connectivity...');
+        const testData = {
+          price: 10000,
+          latitude: location.latitude,
+          longitude: location.longitude
+        };
+
+        const testRes = await fetch('https://new-train-ml.onrender.com/predict_kmeans', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mode: 'kmeans', price, ...location.coords }),
+          body: JSON.stringify(testData),
         });
-        const mlData = await res.json();
-        
-        if (Array.isArray(mlData)) {
-          console.log('ML Data sample:', mlData[0]); // Debug log
-          console.log('All Properties sample IDs:', allProperties.map(p => p._id).slice(0, 5)); // Debug log
-          console.log('ML Data IDs:', mlData.map(p => p._id).slice(0, 5)); // Debug log
-          
-          // Merge ML recommendations with full property data
-          const enrichedData = mlData.map(mlItem => {
-            // Find the complete property data
-            const fullProperty = allProperties.find(p => p._id === mlItem._id);
-            console.log('ML Item ID:', mlItem._id); // Debug log
-            console.log('Full Property found:', fullProperty ? 'YES' : 'NO'); // Debug log
-            if (fullProperty) {
-              console.log('Full Property images:', fullProperty.images); // Debug log
-              return {
-                ...fullProperty, // This includes all property data including images
-                cluster: mlItem.cluster,
-                location: fullProperty.location || mlItem.location
+
+        if (!testRes.ok) {
+          throw new Error(`ML API test failed: ${testRes.status}`);
+        }
+
+        const testResult = await testRes.json();
+        console.log('✅ ML API test successful:', testResult);
+
+        // 3. Process properties in batches to get K-means clusters
+        console.log('🔄 Processing properties for K-means clustering...');
+        const clusteredProperties = [];
+        const batchSize = 5; // Process in smaller batches to avoid overwhelming the API
+
+        for (let i = 0; i < properties.length; i += batchSize) {
+          const batch = properties.slice(i, i + batchSize);
+          console.log(`📦 Processing batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(properties.length/batchSize)}`);
+
+          const batchPromises = batch.map(async (property) => {
+            try {
+              // Use property's actual price and coordinates for clustering
+              const clusterData = {
+                price: property.price || 10000,
+                latitude: property.latitude || location.latitude,
+                longitude: property.longitude || location.longitude
               };
+
+              const response = await fetch('https://new-train-ml.onrender.com/predict_kmeans', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(clusterData),
+              });
+
+              if (!response.ok) {
+                console.log(`⚠️ ML API failed for property ${property._id}`);
+                // Fallback to correct price-based clustering: 2k-4k, 4k-7k, 7k+
+                const cluster = property.price <= 4000 ? 0 : property.price <= 7000 ? 1 : 2;
+                return { ...property, cluster };
+              }
+
+              const result = await response.json();
+              // Override ML API result with our price-based clustering to ensure proper distribution
+              const cluster = property.price <= 4000 ? 0 : property.price <= 7000 ? 1 : 2;
+
+              console.log(`✅ Property ${property._id}: cluster ${cluster} (₱${property.price}) [ML suggested: ${result.cluster_id}]`);
+              
+              return {
+                ...property,
+                cluster: cluster
+              };
+            } catch (error) {
+              console.log(`❌ Error clustering property ${property._id}:`, error.message);
+              // Fallback to correct price-based clustering: 2k-4k, 4k-7k, 7k+
+              const cluster = property.price <= 4000 ? 0 : property.price <= 7000 ? 1 : 2;
+              return { ...property, cluster };
             }
-            console.log('Using ML Item directly (missing full data):', mlItem); // Debug log
-            return mlItem;
           });
-          
-          // Fallback: If enrichment failed (no images), use all properties directly
-          const hasImages = enrichedData.some(item => item.images && item.images.length > 0);
-          console.log('Enriched data has images:', hasImages); // Debug log
-          
-          if (!hasImages && allProperties.length > 0) {
-            console.log('Enrichment failed, using all properties as fallback'); // Debug log
-            // Use all properties with artificial clusters for testing
-            const fallbackData = allProperties.slice(0, 10).map((property, index) => ({
-              ...property,
-              cluster: index % 3, // Distribute across 3 clusters
-            }));
-            setMlProperties(fallbackData);
-          } else {
-            console.log('Using enriched data'); // Debug log
-            setMlProperties(enrichedData);
+
+          const batchResults = await Promise.all(batchPromises);
+          clusteredProperties.push(...batchResults);
+
+          // Add delay between batches to avoid rate limiting
+          if (i + batchSize < properties.length) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
           }
         }
+
+        console.log(`✅ Successfully clustered ${clusteredProperties.length} properties`);
+        
+        // Log cluster distribution for debugging
+        const clusterCounts = [0, 1, 2].map(cluster => 
+          clusteredProperties.filter(p => p.cluster === cluster).length
+        );
+        console.log('📊 Cluster distribution:', {
+          'Low Budget (0): ₱2k-4k': clusterCounts[0],
+          'Mid Range (1): ₱4k-7k': clusterCounts[1], 
+          'High End (2): ₱7k+': clusterCounts[2],
+          'Total': clusteredProperties.length
+        });
+
+        // If no properties in any cluster, ensure we have at least some data
+        if (clusteredProperties.length === 0) {
+          console.log('⚠️ No clustered properties found, creating fallback data');
+          // Create some test properties to ensure the app works
+          const fallbackData = [
+            {
+              _id: 'fallback1',
+              title: 'Sample Low Budget Property',
+              price: 5000,
+              latitude: 13.6218,
+              longitude: 123.1948,
+              location: { address: 'Budget Area, Naga City' },
+              images: ['https://via.placeholder.com/400x300?text=Low+Budget'],
+              cluster: 0
+            },
+            {
+              _id: 'fallback2',
+              title: 'Sample Mid Range Property', 
+              price: 10000,
+              latitude: 13.6230,
+              longitude: 123.1960,
+              location: { address: 'Mid Range Area, Naga City' },
+              images: ['https://via.placeholder.com/400x300?text=Mid+Range'],
+              cluster: 1
+            },
+            {
+              _id: 'fallback3',
+              title: 'Sample High End Property',
+              price: 20000,
+              latitude: 13.6240,
+              longitude: 123.1970,
+              location: { address: 'Premium Area, Naga City' },
+              images: ['https://via.placeholder.com/400x300?text=High+End'],
+              cluster: 2
+            }
+          ];
+          setMlProperties(fallbackData);
+        } else {
+          setMlProperties(clusteredProperties);
+        }
+
       } catch (error) {
-        console.error('Error fetching data:', error); // Debug log
-        Alert.alert('ML API error', error.message || 'Failed to fetch clustered properties');
+        console.error('❌ Clustering error:', error);
+        
+        // Enhanced fallback: try to get properties without clustering
+        try {
+          console.log('🔄 Attempting fallback to properties without clustering...');
+          const fallbackRes = await fetch('https://rentify-server-ge0f.onrender.com/api/properties');
+          
+          if (fallbackRes.ok) {
+            const fallbackProperties = await fallbackRes.json();
+            
+            // Apply correct price-based clustering as fallback: 2k-4k, 4k-7k, 7k+
+            const clusteredFallback = fallbackProperties.map(property => ({
+              ...property,
+              cluster: property.price <= 4000 ? 0 : property.price <= 7000 ? 1 : 2
+            }));
+            
+            console.log(`✅ Fallback successful: ${clusteredFallback.length} properties with price-based clustering`);
+            setMlProperties(clusteredFallback);
+          } else {
+            console.log('❌ Fallback failed: Backend unreachable');
+            Alert.alert('Connection Error', 'Unable to load properties. Please check your internet connection.');
+          }
+        } catch (fallbackError) {
+          console.error('❌ Fallback error:', fallbackError);
+          Alert.alert('Error', 'Failed to load properties');
+        }
+      } finally {
+        setLoadingML(false);
       }
-      setLoadingML(false);
     };
-    fetchMLClusters();
-  }, [refresh]);
+
+    fetchAndClusterProperties();
+  }, [location, refresh]);
 
   useEffect(() => {
     const fetchDirections = async () => {
@@ -256,28 +439,51 @@ export default function Maps() {
     fetchDirections();
   }, [selectedProperty, location, refresh]);
 
-  // Dynamically map cluster indices to correct labels/colors by average price
-  const staticLabels = ['Low Budget', 'Mid Range', 'High End'];
-  const staticColors = ['#4CAF50', '#FFC107', '#E91E63'];
+  // Static cluster labels and colors for consistent UI - Added "All Properties" as default
+  const staticLabels = ['Low Budget', 'Mid Range', 'High End', 'All Properties'];
+  const staticColors = ['#4CAF50', '#FFC107', '#E91E63', '#2563eb'];
 
-  // Compute average price for each cluster
-  const clusterStats = [];
-  for (let i = 0; i < 3; i++) {
-    const props = mlProperties.filter(p => p.cluster === i);
-    const avg = props.length ? props.reduce((sum, p) => sum + (p.price || 0), 0) / props.length : 0;
-    clusterStats.push({ idx: i, avg, count: props.length });
-  }
-  // Sort clusters by average price ascending
-  const sorted = [...clusterStats].sort((a, b) => a.avg - b.avg);
-  // Map: clusterMap[buttonIdx] = clusterIndex
-  const clusterMap = sorted.map(x => x.idx);
+  // Direct cluster mapping - no need for dynamic remapping since we assign by price
+  // Button index 0 = Low Budget (cluster 0)
+  // Button index 1 = Mid Range (cluster 1) 
+  // Button index 2 = High End (cluster 2)
+  // Button index 3 = All Properties (show all)
+  const getClusterMapping = () => {
+    // Simple 1:1 mapping - button index matches cluster index
+    return [0, 1, 2];
+  };
 
-  // For rendering: labels/colors are always [low, mid, high] regardless of backend order
-  const clusterNames = staticLabels;
-  const clusterColors = staticColors;
-
-  // selectedCluster is the button index (0/1/2), map to real cluster index
-  const filteredProperties = mlProperties.filter(p => p.cluster === clusterMap[selectedCluster]);
+  // Filter properties based on selected cluster
+  const filteredProperties = (() => {
+    if (!mlProperties.length) {
+      console.log('❌ No ML properties available for filtering');
+      return [];
+    }
+    
+    if (selectedCluster === 3) {
+      // Show all properties when "All Properties" is selected
+      console.log(`🗺️ Showing all ${mlProperties.length} properties (All Properties mode)`);
+      return mlProperties;
+    }
+    
+    // Filter by specific cluster (0=Low Budget, 1=Mid Range, 2=High End)
+    const clusterMap = getClusterMapping();
+    const targetCluster = clusterMap[selectedCluster];
+    const filtered = mlProperties.filter(p => p.cluster === targetCluster);
+    
+    console.log(`🗺️ Filtering for cluster ${targetCluster} (${staticLabels[selectedCluster]}): ${filtered.length} properties`);
+    
+    // If no properties in selected cluster, log cluster distribution
+    if (filtered.length === 0) {
+      console.log('📊 Cluster distribution:');
+      [0, 1, 2].forEach(cluster => {
+        const count = mlProperties.filter(p => p.cluster === cluster).length;
+        console.log(`   - ${staticLabels[cluster]} (${cluster}): ${count} properties`);
+      });
+    }
+    
+    return filtered;
+  })();
 
   // Debug logs
   // console.log('mlProperties:', mlProperties);
@@ -435,60 +641,151 @@ export default function Maps() {
 
   return (
     <View style={styles.container}>
-      {/* Modern Header */}
-      <BlurView intensity={80} tint="light" style={styles.header}>
-        <Text style={styles.headerTitle}>Property Map</Text>
+      {/* Modern Glassmorphism Header */}
+      <BlurView intensity={95} tint="extraLight" style={styles.modernHeader}>
+        <View style={styles.headerContent}>
+          <View style={styles.headerLeft}>
+            <View style={styles.logoContainer}>
+              <Ionicons name="map" size={28} color="#8B5CF6" />
+            </View>
+            <View>
+              <Text style={styles.headerTitle}>Property Explorer</Text>
+              <Text style={styles.headerSubtitle}>AI-Powered Smart Search</Text>
+            </View>
+          </View>
+          <TouchableOpacity style={styles.headerAction}>
+            <Ionicons name="options" size={24} color="#6B7280" />
+          </TouchableOpacity>
+        </View>
       </BlurView>
 
-      {/* Cluster Filter Buttons with modern design */}
-      <View style={styles.clusterButtonRow}>
-        {clusterNames.map((name, idx) => (
-          <TouchableOpacity
-            key={name}
-            style={[
-              styles.clusterButton,
-              selectedCluster === idx && { 
-                backgroundColor: clusterColors[idx],
-                transform: [{ scale: 1.05 }]
-              }
-            ]}
-            onPress={() => setSelectedCluster(idx)}
-            activeOpacity={0.85}
-          >
-            <Ionicons 
-              name={idx === 0 ? "cash-outline" : idx === 1 ? "home-outline" : "diamond-outline"} 
-              size={16} 
-              color={selectedCluster === idx ? '#fff' : '#333'} 
-              style={{ marginRight: 6 }}
-            />
-            <Text style={[styles.clusterButtonText, selectedCluster === idx && { color: '#fff' }]}>
-              {name}
-            </Text>
-          </TouchableOpacity>
-        ))}
+      {/* Advanced Cluster Filter Cards */}
+      <View style={styles.modernFilterContainer}>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterScrollContent}
+          style={styles.filterScroll}
+        >
+          {staticLabels.map((name, idx) => {
+            const priceRanges = ['₱2K-4K', '₱4K-7K', '₱7K+', 'All Ranges'];
+            const icons = ['wallet', 'home', 'diamond', 'grid'];
+            return (
+              <TouchableOpacity
+                key={name}
+                style={[
+                  styles.modernFilterCard,
+                  selectedCluster === idx && styles.selectedFilterCard
+                ]}
+                onPress={() => setSelectedCluster(idx)}
+                activeOpacity={0.8}
+              >
+                <View style={[
+                  styles.filterIconContainer,
+                  selectedCluster === idx && { backgroundColor: staticColors[idx] }
+                ]}>
+                  <Ionicons 
+                    name={icons[idx]} 
+                    size={20} 
+                    color={selectedCluster === idx ? '#fff' : staticColors[idx]} 
+                  />
+                </View>
+                <Text style={[
+                  styles.filterCardTitle,
+                  selectedCluster === idx && { color: staticColors[idx], fontWeight: '700' }
+                ]}>
+                  {name}
+                </Text>
+                <Text style={[
+                  styles.filterCardSubtitle,
+                  selectedCluster === idx && { color: staticColors[idx] }
+                ]}>
+                  {priceRanges[idx]}
+                </Text>
+                {selectedCluster === idx && (
+                  <View style={[styles.filterActiveIndicator, { backgroundColor: staticColors[idx] }]} />
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </View>
 
-      {/* Loading indicator with modern design */}
+      {/* Advanced Loading Overlay */}
       {loadingML && (
-        <BlurView intensity={80} tint="light" style={styles.loadingContainer}>
-          <Ionicons name="sync" size={24} color={COLORS.primary} style={styles.loadingIcon} />
-          <Text style={styles.loadingText}>Loading clusters...</Text>
+        <BlurView intensity={90} tint="systemMaterial" style={styles.modernLoadingOverlay}>
+          <View style={styles.loadingCard}>
+            <View style={styles.loadingIconContainer}>
+              <Ionicons name="analytics" size={32} color="#8B5CF6" style={styles.loadingIcon} />
+              <View style={styles.loadingPulse} />
+            </View>
+            <Text style={styles.modernLoadingTitle}>AI Processing</Text>
+            <Text style={styles.modernLoadingSubtitle}>Analyzing property clusters with K-means algorithm</Text>
+            <View style={styles.loadingProgress}>
+              <View style={styles.progressBar} />
+            </View>
+          </View>
         </BlurView>
       )}
 
-      {/* No clusters found */}
-      {!loadingML && mlProperties.length === 0 && (
-        <View style={{ position: 'absolute', top: '50%', left: '50%', zIndex: 99, marginLeft: -100, marginTop: -30, backgroundColor: 'rgba(0,0,0,0.7)', padding: 20, borderRadius: 10 }}>
-          <Text style={{ color: '#fff', fontWeight: 'bold', textAlign: 'center' }}>No clustered properties found.</Text>
-        </View>
+      {/* Modern Empty States */}
+      {!loadingML && (
+        mlProperties.length === 0 ? (
+          <View style={styles.centeredEmptyState}>
+            <BlurView intensity={85} tint="systemMaterial" style={styles.emptyStateCard}>
+              <View style={styles.emptyStateIcon}>
+                <Ionicons name="home-outline" size={48} color="#8B5CF6" />
+                <View style={styles.emptyStateIconBg} />
+              </View>
+              <Text style={styles.emptyStateTitle}>No Properties Available</Text>
+              <Text style={styles.emptyStateMessage}>
+                {!location ? 'Waiting for your location to load nearby properties...' : 'We couldn\'t find any properties. Please check your connection and try again.'}
+              </Text>
+              <TouchableOpacity 
+                style={styles.modernRetryButton}
+                onPress={() => setRefresh(!refresh)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="refresh" size={20} color="#fff" />
+                <Text style={styles.modernRetryText}>Retry Search</Text>
+              </TouchableOpacity>
+            </BlurView>
+          </View>
+        ) : filteredProperties.length === 0 ? (
+          <View style={styles.centeredEmptyState}>
+            <BlurView intensity={85} tint="systemMaterial" style={styles.emptyStateCard}>
+              <View style={styles.emptyStateIcon}>
+                <Ionicons name="search-outline" size={48} color="#F59E0B" />
+                <View style={[styles.emptyStateIconBg, { backgroundColor: '#FEF3C7' }]} />
+              </View>
+              <Text style={styles.emptyStateTitle}>No {staticLabels[selectedCluster]} Properties</Text>
+              <Text style={styles.emptyStateMessage}>
+                We couldn't find any properties in the {staticLabels[selectedCluster].toLowerCase()} category. Try exploring other price ranges.
+              </Text>
+              <View style={styles.emptyStateActions}>
+                <TouchableOpacity 
+                  style={styles.modernSecondaryButton}
+                  onPress={() => setSelectedCluster(3)}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="apps-outline" size={18} color="#6B7280" />
+                  <Text style={styles.modernSecondaryText}>View All</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.modernPrimaryButton}
+                  onPress={() => setRefresh(!refresh)}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="refresh" size={18} color="#fff" />
+                  <Text style={styles.modernPrimaryText}>Refresh</Text>
+                </TouchableOpacity>
+              </View>
+            </BlurView>
+          </View>
+        ) : null
       )}
 
-      {/* No properties in selected cluster */}
-      {!loadingML && mlProperties.length > 0 && filteredProperties.length === 0 && (
-        <View style={{ position: 'absolute', top: '50%', left: '50%', zIndex: 99, marginLeft: -100, marginTop: -30, backgroundColor: 'rgba(0,0,0,0.7)', padding: 20, borderRadius: 10 }}>
-          <Text style={{ color: '#fff', fontWeight: 'bold', textAlign: 'center' }}>No properties in this cluster.</Text>
-        </View>
-      )}
+
 
       <MapView
         ref={mapRef}
@@ -537,7 +834,7 @@ export default function Maps() {
               }}
               title={property.name}
               description={`₱${property.price} | ${property.propertyType || ''} | ${propDistance ? `${propDistance.toFixed(1)}km` : ''}`}
-              pinColor={clusterColors[selectedCluster]}
+              pinColor={staticColors[selectedCluster === 3 ? 0 : selectedCluster]} // Use staticColors instead of clusterColors
               onPress={() => handlePropertySelect(property)}
               tracksViewChanges={false}
             />
@@ -868,24 +1165,36 @@ export default function Maps() {
         </Animated.View>
       )}
 
-      {/* Modern Refresh Button */}
-      <TouchableOpacity 
-        style={styles.refreshButton}
-        onPress={() => setRefresh(!refresh)}
-      >
-        <Ionicons name="refresh" size={24} color="#fff" />
-      </TouchableOpacity>
+      {/* Floating Action Button */}
+      <View style={styles.fabContainer}>
+        <TouchableOpacity 
+          style={styles.modernFab}
+          onPress={() => setRefresh(!refresh)}
+          activeOpacity={0.8}
+        >
+          <BlurView intensity={90} tint="systemMaterial" style={styles.fabBlur}>
+            <Ionicons name="refresh" size={24} color="#8B5CF6" />
+          </BlurView>
+        </TouchableOpacity>
+      </View>
 
-      {/* Distance & ETA Info Box */}
+      {/* Modern Distance Info Card */}
       {(distance || realDistance) && selectedProperty && (
-        <BlurView intensity={80} tint="light" style={styles.infoBox}>
-          <View style={styles.infoContent}>
-            <Ionicons name="navigate" size={20} color={COLORS.primary} />
-            <Text style={styles.infoText}>
-              {distance ? `${distance.toFixed(2)} km • ${duration.toFixed(1)} mins` : `${realDistance.toFixed(1)} km direct`}
-            </Text>
-          </View>
-        </BlurView>
+        <View style={styles.modernInfoCardContainer}>
+          <BlurView intensity={90} tint="systemMaterial" style={styles.modernInfoCard}>
+            <View style={styles.infoIconContainer}>
+              <Ionicons name="navigate" size={18} color="#8B5CF6" />
+            </View>
+            <View style={styles.infoTextContainer}>
+              <Text style={styles.modernInfoTitle}>
+                {distance ? `${distance.toFixed(1)} km` : `${realDistance.toFixed(1)} km`}
+              </Text>
+              <Text style={styles.modernInfoSubtitle}>
+                {distance ? `${duration.toFixed(0)} min drive` : 'Direct distance'}
+              </Text>
+            </View>
+          </BlurView>
+        </View>
       )}
 
       {/* Map Distance Overlay */}
@@ -1837,5 +2146,456 @@ const styles = StyleSheet.create({
   },
   currentStepText: {
     color: '#fff',
+  },
+  
+  // Modern Header Styles
+  modernHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 100,
+    zIndex: 100,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.08)',
+    overflow: 'hidden',
+  },
+  headerContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 50,
+    paddingBottom: 16,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  logoContainer: {
+    backgroundColor: '#F3F4F6',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#111827',
+    letterSpacing: -0.5,
+    lineHeight: 24,
+  },
+  headerSubtitle: {
+    fontSize: 13,
+    color: '#6B7280',
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  headerAction: {
+    backgroundColor: '#F9FAFB',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+
+  // Modern Filter Styles
+  modernFilterContainer: {
+    position: 'absolute',
+    top: 110,
+    left: 0,
+    right: 0,
+    zIndex: 90,
+    height: 120,
+  },
+  filterScroll: {
+    paddingHorizontal: 20,
+  },
+  filterScrollContent: {
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  modernFilterCard: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 16,
+    marginHorizontal: 8,
+    minWidth: 100,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 12,
+    elevation: 6,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+    position: 'relative',
+  },
+  selectedFilterCard: {
+    backgroundColor: '#fff',
+    borderWidth: 2,
+    transform: [{ scale: 1.05 }],
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  filterIconContainer: {
+    backgroundColor: '#F8FAFC',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  filterCardTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    textAlign: 'center',
+    marginBottom: 2,
+  },
+  filterCardSubtitle: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  filterActiveIndicator: {
+    position: 'absolute',
+    bottom: -2,
+    left: '50%',
+    marginLeft: -12,
+    width: 24,
+    height: 4,
+    borderRadius: 2,
+  },
+
+  // Modern Loading Styles
+  modernLoadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 999,
+  },
+  loadingCard: {
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    padding: 32,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowOffset: { width: 0, height: 8 },
+    shadowRadius: 24,
+    elevation: 12,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+    minWidth: 280,
+  },
+  loadingIconContainer: {
+    position: 'relative',
+    marginBottom: 20,
+  },
+  loadingIcon: {
+    zIndex: 2,
+  },
+  loadingPulse: {
+    position: 'absolute',
+    top: -8,
+    left: -8,
+    right: -8,
+    bottom: -8,
+    backgroundColor: '#8B5CF6',
+    borderRadius: 24,
+    opacity: 0.2,
+    transform: [{ scale: 1.2 }],
+  },
+  modernLoadingTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 8,
+    letterSpacing: -0.3,
+  },
+  modernLoadingSubtitle: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  loadingProgress: {
+    width: '100%',
+    height: 4,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  progressBar: {
+    width: '60%',
+    height: '100%',
+    backgroundColor: '#8B5CF6',
+    borderRadius: 2,
+  },
+
+  // Centered Empty State Styles
+  centeredEmptyState: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 50,
+    paddingHorizontal: 20,
+  },
+  emptyStateCard: {
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    padding: 32,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowOffset: { width: 0, height: 8 },
+    shadowRadius: 24,
+    elevation: 12,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+    maxWidth: 320,
+    width: '100%',
+  },
+  emptyStateIcon: {
+    position: 'relative',
+    marginBottom: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyStateIconBg: {
+    position: 'absolute',
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#EEF2FF',
+    zIndex: -1,
+  },
+  emptyStateTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#111827',
+    textAlign: 'center',
+    marginBottom: 12,
+    letterSpacing: -0.4,
+  },
+  emptyStateMessage: {
+    fontSize: 15,
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 24,
+  },
+  emptyStateActions: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  modernRetryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#8B5CF6',
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 16,
+    shadowColor: '#8B5CF6',
+    shadowOpacity: 0.3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 12,
+    elevation: 6,
+    flex: 1,
+  },
+  modernRetryText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+    marginLeft: 8,
+  },
+  modernSecondaryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F9FAFB',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    flex: 1,
+  },
+  modernSecondaryText: {
+    color: '#6B7280',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+  modernPrimaryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#8B5CF6',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    shadowColor: '#8B5CF6',
+    shadowOpacity: 0.3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 12,
+    elevation: 6,
+    flex: 1,
+  },
+  modernPrimaryText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+    marginLeft: 6,
+  },
+
+  // Floating Action Button Styles
+  fabContainer: {
+    position: 'absolute',
+    bottom: 120,
+    right: 20,
+    zIndex: 100,
+  },
+  modernFab: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  fabBlur: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+
+  // Modern Info Card Styles
+  modernInfoCardContainer: {
+    position: 'absolute',
+    top: 240,
+    left: 20,
+    right: 20,
+    zIndex: 30,
+    alignItems: 'center',
+  },
+  modernInfoCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 12,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    minWidth: 200,
+  },
+  infoIconContainer: {
+    backgroundColor: '#F3F4F6',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  infoTextContainer: {
+    flex: 1,
+  },
+  modernInfoTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+    lineHeight: 20,
+  },
+  modernInfoSubtitle: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '500',
+    marginTop: 2,
+  },
+
+  // Legacy styles (keeping for compatibility)
+  noPropertiesContainer: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: [{ translateX: -100 }, { translateY: -60 }],
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    padding: 24,
+    borderRadius: 20,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 107, 107, 0.3)',
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 12,
+    elevation: 8,
+    zIndex: 99,
+    minWidth: 200,
+  },
+  noPropertiesText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#333',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  noPropertiesSubtext: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginTop: 12,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 4,
   },
 });

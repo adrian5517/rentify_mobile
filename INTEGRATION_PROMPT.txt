@@ -1,0 +1,156 @@
+APARTMENT ML API - FRONTEND INTEGRATION PROMPT
+===============================================
+
+API ENDPOINT: https://new-train-ml.onrender.com
+
+WHAT IT DOES:
+- Predicts apartment price category (Low Budget, Mid Range, High End)
+- Uses machine learning (KNN and KMeans algorithms)
+- Takes: price, latitude, longitude
+- Returns: category classification
+
+---
+
+AVAILABLE ENDPOINTS:
+-------------------
+
+1. Health Check (GET)
+   URL: https://new-train-ml.onrender.com/
+   Returns: API status and available endpoints
+
+2. KNN Prediction (POST)
+   URL: https://new-train-ml.onrender.com/predict_knn
+   Body: {"price": 10000, "latitude": 13.6218, "longitude": 123.1948}
+   Returns: {"category": "Mid Range"}
+
+3. KMeans Prediction (POST)
+   URL: https://new-train-ml.onrender.com/predict_kmeans
+   Body: {"price": 10000, "latitude": 13.6218, "longitude": 123.1948}
+   Returns: {"cluster_id": 1, "cluster_label": "Mid Range"}
+
+---
+
+JAVASCRIPT EXAMPLE (COPY & PASTE):
+----------------------------------
+
+async function classifyApartment(price, latitude, longitude) {
+    const response = await fetch('https://new-train-ml.onrender.com/predict_knn', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ price, latitude, longitude })
+    });
+    const data = await response.json();
+    return data.category;
+}
+
+// Usage:
+const category = await classifyApartment(10000, 13.6218, 123.1948);
+console.log(category); // "Mid Range"
+
+---
+
+INPUT REQUIREMENTS:
+------------------
+- price: number (must be positive, in PHP)
+- latitude: number (between -90 and 90)
+- longitude: number (between -180 and 180)
+
+OUTPUT CATEGORIES:
+-----------------
+- "Low Budget" = ≤ ₱7,000
+- "Mid Range" = ₱7,001 - ₱14,000
+- "High End" = > ₱14,000
+
+---
+
+TEST DATA:
+---------
+Low Budget:  { price: 5000,  latitude: 13.6195, longitude: 123.1965 }
+Mid Range:   { price: 10000, latitude: 13.6218, longitude: 123.1948 }
+High End:    { price: 20000, latitude: 13.6230, longitude: 123.1920 }
+
+---
+
+ERROR HANDLING:
+--------------
+Status 200: Success
+Status 400: Invalid input (check error message in response)
+Status 500: Server error
+
+Example error response:
+{"error": "Invalid input data", "details": "..."}
+
+---
+
+IMPORTANT NOTES:
+---------------
+1. First request after idle may take 30-60 seconds (Render free tier wakes up)
+2. No authentication required - API is public
+3. Always validate input before sending
+4. Check response.ok before parsing JSON
+5. Content-Type must be 'application/json'
+
+---
+
+QUICK TEST (PASTE IN BROWSER CONSOLE):
+--------------------------------------
+fetch('https://new-train-ml.onrender.com/predict_knn', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ price: 10000, latitude: 13.6218, longitude: 123.1948 })
+})
+.then(res => res.json())
+.then(data => console.log('Category:', data.category));
+
+---
+
+REACT EXAMPLE:
+-------------
+const [category, setCategory] = useState('');
+const [loading, setLoading] = useState(false);
+
+const classify = async (price, lat, lng) => {
+    setLoading(true);
+    const response = await fetch('https://new-train-ml.onrender.com/predict_knn', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ price, latitude: lat, longitude: lng })
+    });
+    const data = await response.json();
+    setCategory(data.category);
+    setLoading(false);
+};
+
+---
+
+RECOMMENDED UI COLORS:
+---------------------
+Low Budget:  Green (#4CAF50)
+Mid Range:   Blue (#2196F3)
+High End:    Orange (#FF9800)
+
+---
+
+INTEGRATION STEPS:
+-----------------
+1. Test health check endpoint to verify API is online
+2. Create fetch/axios function for classification
+3. Add loading state while API processes request
+4. Handle errors gracefully (show user-friendly message)
+5. Display category with appropriate badge/color
+6. Add input validation before sending to API
+
+---
+
+SUPPORT:
+-------
+- Full documentation available in repository
+- Postman collection available for testing
+- No API key required
+- No rate limiting (but please be reasonable)
+
+---
+
+READY TO USE!
+Just copy the JavaScript example above and integrate into your frontend.
+Test with the sample data provided to verify everything works.
