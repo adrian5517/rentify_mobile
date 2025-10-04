@@ -825,6 +825,10 @@ export default function Maps() {
             property.location.longitude
           ) : null;
           
+          // Get cluster color for the house icon
+          const clusterIndex = selectedCluster === 3 ? property.cluster : selectedCluster;
+          const clusterColor = staticColors[clusterIndex] || staticColors[0];
+          
           return (
             <Marker
               key={property._id || index}
@@ -834,10 +838,15 @@ export default function Maps() {
               }}
               title={property.name}
               description={`₱${property.price} | ${property.propertyType || ''} | ${propDistance ? `${propDistance.toFixed(1)}km` : ''}`}
-              pinColor={staticColors[selectedCluster === 3 ? 0 : selectedCluster]} // Use staticColors instead of clusterColors
               onPress={() => handlePropertySelect(property)}
               tracksViewChanges={false}
-            />
+            >
+              {/* Custom House Icon Marker */}
+              <View style={[styles.customMarker, { backgroundColor: clusterColor }]}>
+                <Ionicons name="home" size={24} color="#fff" />
+                <View style={[styles.markerTriangle, { borderTopColor: clusterColor }]} />
+              </View>
+            </Marker>
           );
         })}
 
@@ -2597,5 +2606,33 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     marginLeft: 4,
+  },
+
+  // Custom House Marker Styles
+  customMarker: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 8,
+    elevation: 8,
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  markerTriangle: {
+    position: 'absolute',
+    bottom: -8,
+    width: 0,
+    height: 0,
+    borderLeftWidth: 8,
+    borderRightWidth: 8,
+    borderTopWidth: 10,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: '#4CAF50', // This will be overridden by the dynamic color
   },
 });
