@@ -12,6 +12,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as Location from 'expo-location';
 import { FlatList, PanResponder, Animated } from 'react-native';
 import { ActivityIndicator } from 'react-native';
+import propertyService from '../../services/propertyService';
 
 export default function Home() {
   // For slide down to close
@@ -74,11 +75,39 @@ if (profilePicture.includes('api.dicebear.com') && profilePicture.includes('/svg
   };
 
   const fetchProperties = async () => {
-    const res = await fetch('https://rentify-server-ge0f.onrender.com/api/properties');
-    const data = await res.json();
-    if (Array.isArray(data)) {
-      setProperties(data);
-      setFilteredProperties(data);
+    try {
+      console.log('🔄 Fetching properties from API...');
+      const result = await propertyService.getAllProperties({ forceRefresh: true });
+      console.log('📦 API Response:', result);
+      
+      // Handle the response object structure
+      let propertiesArray = [];
+      
+      if (result.success && Array.isArray(result.properties)) {
+        propertiesArray = result.properties;
+      } else if (Array.isArray(result.properties)) {
+        propertiesArray = result.properties;
+      } else if (Array.isArray(result)) {
+        propertiesArray = result;
+      }
+      
+      console.log('✅ Fetched properties:', propertiesArray.length);
+      
+      if (propertiesArray.length > 0) {
+        setProperties(propertiesArray);
+        setFilteredProperties(propertiesArray);
+        console.log('📦 Sample property:', JSON.stringify(propertiesArray[0]).substring(0, 200));
+      } else {
+        console.log('⚠️ No properties returned from API - showing empty state');
+        setProperties([]);
+        setFilteredProperties([]);
+      }
+    } catch (error) {
+      console.error('❌ Error fetching properties:', error);
+      // Show user-friendly error
+      alert('Unable to load properties. Please check your internet connection and try again.');
+      setProperties([]);
+      setFilteredProperties([]);
     }
   };
 
@@ -346,10 +375,53 @@ if (profilePicture.includes('api.dicebear.com') && profilePicture.includes('/svg
                     />
                   ))}
                 </ScrollView>
-                <Text style={styles.sheetTitle}>{selectedProperty.name}</Text>
-                <Text style={styles.sheetPrice}>₱{selectedProperty.price}/month</Text>
-                <Text style={styles.sheetLocation}>{selectedProperty.location?.address}</Text>
-                <Text style={styles.sheetDescription}>{selectedProperty.description}</Text>
+                {/* Modern Property Header Card */}
+                <View style={styles.propertyHeaderCard}>
+                  <View style={styles.propertyTitleRow}>
+                    <View style={styles.propertyTitleContainer}>
+                      <Text style={styles.modernSheetTitle}>{selectedProperty.name}</Text>
+                      <View style={styles.propertyTypeContainer}>
+                        <View style={styles.propertyTypeBadge}>
+                          <Ionicons name="home" size={14} color={COLORS.primary} />
+                          <Text style={styles.propertyTypeText}>{selectedProperty.propertyType || 'Property'}</Text>
+                        </View>
+                      </View>
+                    </View>
+                    <TouchableOpacity style={styles.favoriteButton}>
+                      <Ionicons name="heart-outline" size={26} color="#EF4444" />
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Price and Rating Row */}
+                  <View style={styles.priceRatingRow}>
+                    <View style={styles.modernPriceContainer}>
+                      <Text style={styles.modernSheetPrice}>₱{selectedProperty.price?.toLocaleString()}</Text>
+                      <Text style={styles.priceLabel}>/month</Text>
+                    </View>
+                    <View style={styles.modernRatingBadge}>
+                      <Ionicons name="star" size={16} color="#FFD700" />
+                      <Text style={styles.ratingValue}>4.9</Text>
+                      <Text style={styles.reviewCount}>(124)</Text>
+                    </View>
+                  </View>
+
+                  {/* Location with Icon */}
+                  <View style={styles.modernLocationRow}>
+                    <View style={styles.locationIconContainer}>
+                      <Ionicons name="location" size={18} color={COLORS.primary} />
+                    </View>
+                    <Text style={styles.modernSheetLocation}>{selectedProperty.location?.address}</Text>
+                  </View>
+                </View>
+
+                {/* Description Card */}
+                <View style={styles.descriptionCard}>
+                  <View style={styles.descriptionHeader}>
+                    <Ionicons name="document-text" size={20} color={COLORS.primary} />
+                    <Text style={styles.descriptionTitle}>About This Property</Text>
+                  </View>
+                  <Text style={styles.modernSheetDescription}>{selectedProperty.description}</Text>
+                </View>
                 {selectedProperty.amenities && (
                   <View style={styles.amenitiesContainer}>
                     <Text style={styles.amenitiesTitle}>Amenities:</Text>
@@ -358,13 +430,97 @@ if (profilePicture.includes('api.dicebear.com') && profilePicture.includes('/svg
                     ))}
                   </View>
                 )}
-                <View style={styles.sheetActions}>
-                  <TouchableOpacity style={styles.modernContactButton} onPress={() => alert(`Contact ${selectedProperty.postedBy || 'owner'}`)}>
-                    <Text style={styles.modernContactButtonText}>Contact</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.modernRentButton} onPress={() => alert(`You chose to rent: ${selectedProperty.name}`)}>
-                    <Text style={styles.modernRentButtonText}>Rent</Text>
-                  </TouchableOpacity>
+                {/* Modern Contact Container */}
+                <View style={styles.modernContactContainer}>
+                  {/* Host Information Card */}
+                  <View style={styles.hostInfoCard}>
+                    <View style={styles.hostHeader}>
+                      <View style={styles.hostAvatarContainer}>
+                        <View style={styles.hostAvatar}>
+                          <Ionicons name="person" size={24} color="#fff" />
+                        </View>
+                        <View style={styles.onlineBadge} />
+                      </View>
+                      <View style={styles.hostDetails}>
+                        <Text style={styles.hostName}>{selectedProperty.postedBy || 'Property Owner'}</Text>
+                        <Text style={styles.hostTitle}>Verified Host</Text>
+                        <View style={styles.hostRating}>
+                          <Ionicons name="star" size={14} color="#FFD700" />
+                          <Text style={styles.hostRatingText}>4.9 (127 reviews)</Text>
+                        </View>
+                      </View>
+                      <TouchableOpacity style={styles.hostMessageIcon}>
+                        <Ionicons name="chatbubble-ellipses" size={20} color={COLORS.primary} />
+                      </TouchableOpacity>
+                    </View>
+                    
+                    <View style={styles.hostStatsRow}>
+                      <View style={styles.hostStat}>
+                        <Text style={styles.hostStatValue}>98%</Text>
+                        <Text style={styles.hostStatLabel}>Response Rate</Text>
+                      </View>
+                      <View style={styles.hostStatDivider} />
+                      <View style={styles.hostStat}>
+                        <Text style={styles.hostStatValue}>{'< 1hr'}</Text>
+                        <Text style={styles.hostStatLabel}>Response Time</Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Quick Actions */}
+                  <View style={styles.quickActionsContainer}>
+                    <Text style={styles.quickActionsTitle}>Get in Touch</Text>
+                    <View style={styles.quickActionsRow}>
+                      <TouchableOpacity 
+                        style={styles.quickActionCard}
+                        onPress={() => alert(`Calling ${selectedProperty.postedBy || 'owner'}`)}
+                      >
+                        <View style={styles.quickActionIcon}>
+                          <Ionicons name="call" size={22} color="#10B981" />
+                        </View>
+                        <Text style={styles.quickActionText}>Call</Text>
+                      </TouchableOpacity>
+                      
+                      <TouchableOpacity 
+                        style={styles.quickActionCard}
+                        onPress={() => alert(`Messaging ${selectedProperty.postedBy || 'owner'}`)}
+                      >
+                        <View style={styles.quickActionIcon}>
+                          <Ionicons name="chatbubble" size={22} color="#3B82F6" />
+                        </View>
+                        <Text style={styles.quickActionText}>Message</Text>
+                      </TouchableOpacity>
+                      
+                      <TouchableOpacity 
+                        style={styles.quickActionCard}
+                        onPress={() => alert('Opening email client...')}
+                      >
+                        <View style={styles.quickActionIcon}>
+                          <Ionicons name="mail" size={22} color="#F59E0B" />
+                        </View>
+                        <Text style={styles.quickActionText}>Email</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {/* Primary Action Buttons */}
+                  <View style={styles.primaryActionsContainer}>
+                    <TouchableOpacity 
+                      style={styles.modernScheduleButton}
+                      onPress={() => alert('Schedule a viewing...')}
+                    >
+                      <Ionicons name="calendar-outline" size={20} color={COLORS.primary} />
+                      <Text style={styles.modernScheduleButtonText}>Schedule Viewing</Text>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity 
+                      style={styles.modernRentButton}
+                      onPress={() => alert(`You chose to rent: ${selectedProperty.name}`)}
+                    >
+                      <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                      <Text style={styles.modernRentButtonText}>Apply Now</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
 
                 
@@ -737,9 +893,9 @@ const styles = StyleSheet.create({
   },
   sheetModal: {
     backgroundColor: '#fff',
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    padding: 18,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 12,
     height: '90%',
     elevation: 16,
     shadowColor: COLORS.primary,
@@ -751,9 +907,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 6,
     position: 'relative',
-    paddingTop: 8,
+    paddingTop: 4,
   },
   modalHandle: {
     width: 40,
@@ -776,10 +932,10 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   sheetImage: {
-    width: Dimensions.get('window').width - 36,
-    height: 210,
-    borderRadius: 22,
-    marginBottom: 12,
+    width: Dimensions.get('window').width - 24,
+    height: 180,
+    borderRadius: 16,
+    marginBottom: 8,
     resizeMode: 'cover',
     alignSelf: 'center',
     backgroundColor: '#f3f3f3',
@@ -816,50 +972,400 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     textAlign: 'center',
   },
-  sheetActions: {
-    marginTop: 16,
-    marginBottom: 20,
-  },
-  // --- MODERN MODAL BUTTONS ---
-  modernContactButton: {
+
+  // --- MODERN PROPERTY HEADER CARD ---
+  propertyHeaderCard: {
     backgroundColor: '#fff',
-    borderWidth: 2,
-    borderColor: COLORS.primary,
-    borderRadius: 24,
-    paddingVertical: 15,
-    marginBottom: 12,
+    borderRadius: 16,
+    padding: 14,
+    marginVertical: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 16,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+  },
+  propertyTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 10,
+  },
+  propertyTitleContainer: {
+    flex: 1,
+    marginRight: 12,
+  },
+  modernSheetTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#111827',
+    marginBottom: 6,
+    lineHeight: 28,
+    letterSpacing: -0.5,
+  },
+  propertyTypeContainer: {
+    flexDirection: 'row',
     alignItems: 'center',
-    width: '100%',
-    shadowColor: COLORS.primary,
-    shadowOpacity: 0.13,
+  },
+  propertyTypeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EEF2FF',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+  },
+  propertyTypeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.primary,
+    marginLeft: 6,
+    textTransform: 'capitalize',
+  },
+  favoriteButton: {
+    backgroundColor: '#FEF2F2',
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
+    shadowColor: '#EF4444',
+    shadowOpacity: 0.1,
     shadowOffset: { width: 0, height: 2 },
     shadowRadius: 8,
     elevation: 3,
   },
-  modernContactButtonText: {
-    color: COLORS.primary,
-    fontWeight: 'bold',
-    fontSize: 18,
-    letterSpacing: 0.3,
-  },
-  modernRentButton: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 24,
-    paddingVertical: 15,
+  priceRatingRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    width: '100%',
-    marginTop: 6,
+    marginBottom: 10,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  modernPriceContainer: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
+  modernSheetPrice: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: COLORS.primary,
+    letterSpacing: -0.8,
+  },
+  priceLabel: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginLeft: 6,
+    fontWeight: '500',
+  },
+  modernRatingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFBEB',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#FEF3C7',
+    gap: 4,
+  },
+  ratingValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#92400E',
+  },
+  reviewCount: {
+    fontSize: 12,
+    color: '#78716C',
+    fontWeight: '500',
+  },
+  modernLocationRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  locationIconContainer: {
+    backgroundColor: '#EEF2FF',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+  },
+  modernSheetLocation: {
+    flex: 1,
+    fontSize: 15,
+    color: '#4B5563',
+    lineHeight: 22,
+    fontWeight: '500',
+  },
+
+  // Description Card
+  descriptionCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  descriptionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  descriptionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+    marginLeft: 8,
+    letterSpacing: -0.2,
+  },
+  modernSheetDescription: {
+    fontSize: 14,
+    color: '#4B5563',
+    lineHeight: 21,
+    fontWeight: '400',
+  },
+
+  sheetActions: {
+    marginTop: 16,
+    marginBottom: 15,
+    flexDirection: 'column',
+  },
+
+  // --- MODERN CONTACT CONTAINER ---
+  modernContactContainer: {
+    marginTop: 12,
+    marginBottom: 12,
+    gap: 10,
+  },
+  
+  // Host Info Card
+  hostInfoCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 14,
+    shadowColor: '#8B5CF6',
+    shadowOpacity: 0.12,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 16,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+  },
+  hostHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  hostAvatarContainer: {
+    position: 'relative',
+    marginRight: 16,
+  },
+  hostAvatar: {
+    backgroundColor: COLORS.primary,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
     shadowColor: COLORS.primary,
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.3,
     shadowOffset: { width: 0, height: 4 },
     shadowRadius: 12,
-    elevation: 4,
+    elevation: 6,
+  },
+  onlineBadge: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#10B981',
+    borderWidth: 3,
+    borderColor: '#fff',
+  },
+  hostDetails: {
+    flex: 1,
+  },
+  hostName: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 4,
+    letterSpacing: -0.2,
+  },
+  hostTitle: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginBottom: 6,
+    fontWeight: '500',
+  },
+  hostRating: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFBEB',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#FEF3C7',
+  },
+  hostRatingText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#92400E',
+    marginLeft: 4,
+  },
+  hostMessageIcon: {
+    backgroundColor: '#F9FAFB',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+  },
+  hostStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+  },
+  hostStat: {
+    alignItems: 'center',
+  },
+  hostStatValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.primary,
+    marginBottom: 4,
+  },
+  hostStatLabel: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    fontWeight: '500',
+  },
+  hostStatDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: '#E5E7EB',
+  },
+
+  // Quick Actions
+  quickActionsContainer: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  quickActionsTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#374151',
+    marginBottom: 10,
+    letterSpacing: -0.2,
+  },
+  quickActionsRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  quickActionCard: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  quickActionIcon: {
+    backgroundColor: '#F9FAFB',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  quickActionText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#374151',
+  },
+
+  // Primary Actions
+  primaryActionsContainer: {
+    gap: 10,
+  },
+  modernScheduleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+    borderRadius: 14,
+    paddingVertical: 13,
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 8,
+    elevation: 3,
+    gap: 8,
+  },
+  modernScheduleButtonText: {
+    color: COLORS.primary,
+    fontWeight: '700',
+    fontSize: 16,
+    letterSpacing: 0.2,
+  },
+  modernRentButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.primary,
+    borderRadius: 14,
+    paddingVertical: 13,
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 12,
+    elevation: 6,
+    gap: 8,
   },
   modernRentButtonText: {
     color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 18,
-    letterSpacing: 0.3,
+    fontWeight: '700',
+    fontSize: 16,
+    letterSpacing: 0.2,
   },
 
   modalContainer: {
@@ -983,12 +1489,13 @@ const styles = StyleSheet.create({
   
   
   amenitiesContainer: {
-    marginVertical: 10,
+    marginVertical: 8,
   },
   
   amenitiesTitle: {
     fontWeight: 'bold',
-    marginBottom: 4,
+    marginBottom: 3,
+    fontSize: 15,
   },
   
   amenityItem: {

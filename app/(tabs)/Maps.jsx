@@ -59,6 +59,12 @@ export default function Maps() {
   const bookingAnim = useRef(new Animated.Value(0)).current;
   const actionsAnim = useRef(new Animated.Value(1)).current;
   const [realDistance, setRealDistance] = useState(null);
+  const [showHostContact, setShowHostContact] = useState(false);
+  const hostContactAnim = useRef(new Animated.Value(0)).current;
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [showImageViewer, setShowImageViewer] = useState(false);
+  const imageViewerAnim = useRef(new Animated.Value(0)).current;
+  const scrollViewRef = useRef(null);
 
   // Helper to calculate accurate distance between two coordinates using Haversine formula
   function calculateDistance(lat1, lon1, lat2, lon2) {
@@ -161,62 +167,104 @@ export default function Maps() {
           throw new Error(`Backend API error: ${propertiesRes.status}`);
         }
 
-        const properties = await propertiesRes.json();
+        const data = await propertiesRes.json();
+        
+        // Handle different response formats
+        let properties = [];
+        if (Array.isArray(data)) {
+          properties = data;
+        } else if (data.properties && Array.isArray(data.properties)) {
+          properties = data.properties;
+        } else if (data.success && data.properties) {
+          properties = data.properties;
+        }
+        
         console.log(`✅ Fetched ${properties.length} properties from backend`);
+        console.log('📦 Sample property:', properties[0] ? JSON.stringify(properties[0]).substring(0, 200) : 'none');
 
         if (!properties || properties.length === 0) {
           console.log('❌ No properties found from backend, using test data');
-          // Use test data for development/debugging
+          // Use test data for development/debugging with correct structure
           const testProperties = [
             {
               _id: 'test1',
-              title: 'Affordable Studio Apartment',
+              name: 'Affordable Studio Apartment',
+              description: 'Cozy studio perfect for students and young professionals',
               price: 3500,
-              latitude: 13.6218,
-              longitude: 123.1948,
-              location: 'Budget Area',
+              location: {
+                latitude: 13.6218,
+                longitude: 123.1948,
+                address: 'Budget Area, Naga City'
+              },
               images: ['https://via.placeholder.com/400x300?text=Affordable+Studio'],
-              type: 'studio'
+              propertyType: 'studio',
+              amenities: ['WiFi', 'Security'],
+              status: 'available',
+              postedBy: 'Maria Santos'
             },
             {
               _id: 'test2', 
-              title: 'Mid-Range Condo',
+              name: 'Mid-Range Condo',
+              description: 'Comfortable condominium unit with modern amenities',
               price: 5500,
-              latitude: 13.6230,
-              longitude: 123.1960,
-              location: 'Mid-Range Area',
+              location: {
+                latitude: 13.6230,
+                longitude: 123.1960,
+                address: 'Mid-Range Area, Naga City'
+              },
               images: ['https://via.placeholder.com/400x300?text=Mid-Range+Condo'],
-              type: 'condominium'
+              propertyType: 'condominium',
+              amenities: ['WiFi', 'Parking', 'Security'],
+              status: 'available',
+              postedBy: 'Juan Dela Cruz'
             },
             {
               _id: 'test3',
-              title: 'Luxury Penthouse',
+              name: 'Luxury Penthouse',
+              description: 'Premium penthouse with stunning city views',
               price: 15000,
-              latitude: 13.6240,
-              longitude: 123.1970,
-              location: 'Premium Area',
+              location: {
+                latitude: 13.6240,
+                longitude: 123.1970,
+                address: 'Premium Area, Naga City'
+              },
               images: ['https://via.placeholder.com/400x300?text=Luxury+Penthouse'],
-              type: 'penthouse'
+              propertyType: 'penthouse',
+              amenities: ['WiFi', 'Parking', 'Security', 'Pool', 'Gym'],
+              status: 'available',
+              postedBy: 'Pedro Reyes'
             },
             {
               _id: 'test4',
-              title: 'Budget Room',
+              name: 'Budget Room',
+              description: 'Affordable room near universities',
               price: 2500,
-              latitude: 13.6200,
-              longitude: 123.1930,
-              location: 'Economic Zone',
+              location: {
+                latitude: 13.6200,
+                longitude: 123.1930,
+                address: 'Economic Zone, Naga City'
+              },
               images: ['https://via.placeholder.com/400x300?text=Budget+Room'],
-              type: 'room'
+              propertyType: 'room',
+              amenities: ['WiFi'],
+              status: 'available',
+              postedBy: 'Ana Garcia'
             },
             {
               _id: 'test5',
-              title: 'Modern Apartment',
+              name: 'Modern Apartment',
+              description: 'Spacious apartment in prime location',
               price: 8000,
-              latitude: 13.6250,
-              longitude: 123.1980,
-              location: 'Modern District',
+              location: {
+                latitude: 13.6250,
+                longitude: 123.1980,
+                address: 'Modern District, Naga City'
+              },
               images: ['https://via.placeholder.com/400x300?text=Modern+Apartment'],
-              type: 'apartment'
+              propertyType: 'apartment',
+              amenities: ['WiFi', 'Parking', 'Security', 'Gym'],
+              status: 'available',
+              postedBy: 'Carlos Lopez'
             }
           ];
           
@@ -227,6 +275,7 @@ export default function Maps() {
           }));
           
           console.log('✅ Using test data with price-based clustering');
+          console.log(`📊 Test data: ${clusteredTestData.length} properties`);
           setMlProperties(clusteredTestData);
           return;
         }
@@ -264,10 +313,14 @@ export default function Maps() {
           const batchPromises = batch.map(async (property) => {
             try {
               // Use property's actual price and coordinates for clustering
+              // Handle both old format (latitude/longitude) and new format (location.latitude/longitude)
+              const lat = property.location?.latitude || property.latitude || location.latitude;
+              const lng = property.location?.longitude || property.longitude || location.longitude;
+              
               const clusterData = {
                 price: property.price || 10000,
-                latitude: property.latitude || location.latitude,
-                longitude: property.longitude || location.longitude
+                latitude: lat,
+                longitude: lng
               };
 
               const response = await fetch('https://new-train-ml.onrender.com/predict_kmeans', {
@@ -287,17 +340,39 @@ export default function Maps() {
               // Override ML API result with our price-based clustering to ensure proper distribution
               const cluster = property.price <= 4000 ? 0 : property.price <= 7000 ? 1 : 2;
 
-              console.log(`✅ Property ${property._id}: cluster ${cluster} (₱${property.price}) [ML suggested: ${result.cluster_id}]`);
+              console.log(`✅ Property ${property.name || property._id}: cluster ${cluster} (₱${property.price}) [ML suggested: ${result.cluster_id}]`);
               
-              return {
+              // Ensure location object exists
+              const normalizedProperty = {
                 ...property,
-                cluster: cluster
+                cluster: cluster,
+                // Normalize location format
+                location: property.location || {
+                  latitude: property.latitude || lat,
+                  longitude: property.longitude || lng,
+                  address: property.address || property.location?.address || 'Naga City'
+                }
               };
+              
+              return normalizedProperty;
             } catch (error) {
-              console.log(`❌ Error clustering property ${property._id}:`, error.message);
+              console.log(`❌ Error clustering property ${property.name || property._id}:`, error.message);
               // Fallback to correct price-based clustering: 2k-4k, 4k-7k, 7k+
               const cluster = property.price <= 4000 ? 0 : property.price <= 7000 ? 1 : 2;
-              return { ...property, cluster };
+              
+              // Ensure location object exists
+              const lat = property.location?.latitude || property.latitude || location.latitude;
+              const lng = property.location?.longitude || property.longitude || location.longitude;
+              
+              return { 
+                ...property, 
+                cluster,
+                location: property.location || {
+                  latitude: lat,
+                  longitude: lng,
+                  address: property.address || property.location?.address || 'Naga City'
+                }
+              };
             }
           });
 
@@ -317,9 +392,9 @@ export default function Maps() {
           clusteredProperties.filter(p => p.cluster === cluster).length
         );
         console.log('📊 Cluster distribution:', {
-          'Low Budget (0): ₱2k-4k': clusterCounts[0],
-          'Mid Range (1): ₱4k-7k': clusterCounts[1], 
-          'High End (2): ₱7k+': clusterCounts[2],
+          'Low Budget': clusterCounts[0],
+          'Mid Range': clusterCounts[1], 
+          'High End': clusterCounts[2],
           'Total': clusteredProperties.length
         });
 
@@ -330,32 +405,53 @@ export default function Maps() {
           const fallbackData = [
             {
               _id: 'fallback1',
-              title: 'Sample Low Budget Property',
-              price: 5000,
-              latitude: 13.6218,
-              longitude: 123.1948,
-              location: { address: 'Budget Area, Naga City' },
+              name: 'Sample Low Budget Property',
+              description: 'Affordable property in Naga City',
+              price: 3500,
+              location: { 
+                latitude: 13.6218,
+                longitude: 123.1948,
+                address: 'Budget Area, Naga City' 
+              },
               images: ['https://via.placeholder.com/400x300?text=Low+Budget'],
+              propertyType: 'apartment',
+              amenities: ['WiFi', 'Security'],
+              status: 'available',
+              postedBy: 'Property Owner',
               cluster: 0
             },
             {
               _id: 'fallback2',
-              title: 'Sample Mid Range Property', 
-              price: 10000,
-              latitude: 13.6230,
-              longitude: 123.1960,
-              location: { address: 'Mid Range Area, Naga City' },
+              name: 'Sample Mid Range Property',
+              description: 'Comfortable living space',
+              price: 5500,
+              location: { 
+                latitude: 13.6230,
+                longitude: 123.1960,
+                address: 'Mid Range Area, Naga City' 
+              },
               images: ['https://via.placeholder.com/400x300?text=Mid+Range'],
+              propertyType: 'condominium',
+              amenities: ['WiFi', 'Parking', 'Security'],
+              status: 'available',
+              postedBy: 'Property Owner',
               cluster: 1
             },
             {
               _id: 'fallback3',
-              title: 'Sample High End Property',
-              price: 20000,
-              latitude: 13.6240,
-              longitude: 123.1970,
-              location: { address: 'Premium Area, Naga City' },
+              name: 'Sample High End Property',
+              description: 'Luxury property with premium amenities',
+              price: 15000,
+              location: { 
+                latitude: 13.6240,
+                longitude: 123.1970,
+                address: 'Premium Area, Naga City' 
+              },
               images: ['https://via.placeholder.com/400x300?text=High+End'],
+              propertyType: 'penthouse',
+              amenities: ['WiFi', 'Parking', 'Security', 'Pool', 'Gym'],
+              status: 'available',
+              postedBy: 'Property Owner',
               cluster: 2
             }
           ];
@@ -376,10 +472,20 @@ export default function Maps() {
             const fallbackProperties = await fallbackRes.json();
             
             // Apply correct price-based clustering as fallback: 2k-4k, 4k-7k, 7k+
-            const clusteredFallback = fallbackProperties.map(property => ({
-              ...property,
-              cluster: property.price <= 4000 ? 0 : property.price <= 7000 ? 1 : 2
-            }));
+            const clusteredFallback = fallbackProperties.map(property => {
+              const lat = property.location?.latitude || property.latitude || 13.6218;
+              const lng = property.location?.longitude || property.longitude || 123.1815;
+              
+              return {
+                ...property,
+                cluster: property.price <= 4000 ? 0 : property.price <= 7000 ? 1 : 2,
+                location: property.location || {
+                  latitude: lat,
+                  longitude: lng,
+                  address: property.address || property.location?.address || 'Naga City'
+                }
+              };
+            });
             
             console.log(`✅ Fallback successful: ${clusteredFallback.length} properties with price-based clustering`);
             setMlProperties(clusteredFallback);
@@ -603,6 +709,39 @@ export default function Maps() {
     }).start();
   };
 
+  // Function to toggle host contact section
+  const toggleHostContact = () => {
+    setShowHostContact(!showHostContact);
+    Animated.spring(hostContactAnim, {
+      toValue: showHostContact ? 0 : 1,
+      useNativeDriver: false,
+      tension: 50,
+      friction: 7
+    }).start();
+  };
+
+  // Function to toggle image viewer
+  const toggleImageViewer = (index = 0) => {
+    if (!showImageViewer) {
+      setCurrentImageIndex(index);
+    }
+    setShowImageViewer(!showImageViewer);
+    Animated.spring(imageViewerAnim, {
+      toValue: showImageViewer ? 0 : 1,
+      useNativeDriver: true,
+      tension: 50,
+      friction: 7
+    }).start();
+  };
+
+  // Function to handle image scroll
+  const handleImageScroll = (event) => {
+    const scrollPosition = event.nativeEvent.contentOffset.x;
+    const imageWidth = event.nativeEvent.layoutMeasurement.width;
+    const index = Math.round(scrollPosition / imageWidth);
+    setCurrentImageIndex(index);
+  };
+
   // Function to close navigation
   const closeNavigation = () => {
     Animated.spring(slideAnim, {
@@ -668,7 +807,7 @@ export default function Maps() {
           style={styles.filterScroll}
         >
           {staticLabels.map((name, idx) => {
-            const priceRanges = ['₱2K-4K', '₱4K-7K', '₱7K+', 'All Ranges'];
+           
             const icons = ['wallet', 'home', 'diamond', 'grid'];
             return (
               <TouchableOpacity
@@ -700,7 +839,7 @@ export default function Maps() {
                   styles.filterCardSubtitle,
                   selectedCluster === idx && { color: staticColors[idx] }
                 ]}>
-                  {priceRanges[idx]}
+                 
                 </Text>
                 {selectedCluster === idx && (
                   <View style={[styles.filterActiveIndicator, { backgroundColor: staticColors[idx] }]} />
@@ -876,38 +1015,82 @@ export default function Maps() {
             }
           ]}
         >
-          {/* Modal Header with Close Button */}
-          <View style={styles.fullScreenHeader}>
+          {/* Modal Header with Close Button - Glassmorphism */}
+          <BlurView intensity={95} tint="light" style={styles.fullScreenHeader}>
             <TouchableOpacity 
               style={styles.backButton}
               onPress={() => {
                 setSelectedProperty(null);
                 setIsExpanded(false);
                 expandAnim.setValue(0);
+                setCurrentImageIndex(0);
               }}
             >
-              <Ionicons name="arrow-back" size={24} color="#fff" />
+              <Ionicons name="arrow-back" size={24} color="#111827" />
             </TouchableOpacity>
             <Text style={styles.fullScreenHeaderTitle}>Property Details</Text>
             <TouchableOpacity style={styles.headerFavoriteButton}>
-              <Ionicons name="heart-outline" size={24} color="#fff" />
+              <Ionicons name="heart-outline" size={24} color="#E91E63" />
             </TouchableOpacity>
-          </View>
+          </BlurView>
           
-          {/* Property Image with Gradient Overlay */}
-          <View style={styles.fullScreenImageContainer}>
-            <Image
-              source={{ uri: getImageUri(selectedProperty) }}
-              style={styles.fullScreenPropertyImage}
-              resizeMode="cover"
-            />
-            <View style={styles.fullScreenImageGradient} />
-            <View style={styles.fullScreenImageOverlay}>
+          {/* Property Image Slider */}
+          <View style={styles.imageSliderContainer}>
+            <ScrollView
+              ref={scrollViewRef}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onScroll={handleImageScroll}
+              scrollEventThrottle={16}
+              style={styles.imageSlider}
+            >
+              {(selectedProperty.images && selectedProperty.images.length > 0 ? selectedProperty.images : [getImageUri(selectedProperty)]).map((image, index) => (
+                <TouchableOpacity
+                  key={index}
+                  activeOpacity={0.9}
+                  onPress={() => toggleImageViewer(index)}
+                  style={styles.imageSlide}
+                >
+                  <Image
+                    source={{ uri: image }}
+                    style={styles.sliderImage}
+                    resizeMode="cover"
+                  />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            
+            {/* Image Counter Badge */}
+            <View style={styles.imageCounterBadge}>
+              <Ionicons name="images" size={14} color="#fff" />
+              <Text style={styles.imageCounterText}>
+                {currentImageIndex + 1}/{selectedProperty.images?.length || 1}
+              </Text>
+            </View>
+            
+            {/* Property Type Badge */}
+            <View style={styles.propertyBadgeOverlay}>
               <View style={styles.propertyBadgeFullScreen}>
-                <Ionicons name="home" size={18} color="#fff" />
+                <Ionicons name="home" size={16} color="#fff" />
                 <Text style={styles.badgeTextFullScreen}>{selectedProperty.propertyType || 'Property'}</Text>
               </View>
             </View>
+            
+            {/* Pagination Dots */}
+            {selectedProperty.images && selectedProperty.images.length > 1 && (
+              <View style={styles.paginationDots}>
+                {selectedProperty.images.map((_, index) => (
+                  <View
+                    key={index}
+                    style={[
+                      styles.paginationDot,
+                      currentImageIndex === index && styles.paginationDotActive
+                    ]}
+                  />
+                ))}
+              </View>
+            )}
           </View>
           
           {/* Scrollable Content */}
@@ -916,20 +1099,20 @@ export default function Maps() {
             showsVerticalScrollIndicator={false}
             bounces={true}
           >
-            {/* Property Header */}
+            {/* Property Header - Optimized */}
             <View style={styles.fullScreenPropertyHeader}>
               <View style={styles.propertyTitleRow}>
                 <View style={styles.propertyTitleContainer}>
                   <Text style={styles.fullScreenPropertyTitle}>{selectedProperty.name}</Text>
                   <View style={styles.propertyBadgeContainer}>
                     <View style={styles.propertyTypeBadge}>
-                      <Ionicons name="home" size={14} color={COLORS.primary} />
+                      <Ionicons name="home" size={12} color={COLORS.primary} />
                       <Text style={styles.propertyTypeText}>{selectedProperty.propertyType || 'Property'}</Text>
                     </View>
                   </View>
                 </View>
                 <TouchableOpacity style={styles.favoriteButtonLarge}>
-                  <Ionicons name="heart-outline" size={28} color="#E91E63" />
+                  <Ionicons name="heart-outline" size={24} color="#E91E63" />
                 </TouchableOpacity>
               </View>
               
@@ -939,29 +1122,29 @@ export default function Maps() {
                   <Text style={styles.fullScreenPriceLabel}>/month</Text>
                 </View>
                 <View style={styles.ratingContainer}>
-                  <Ionicons name="star" size={16} color="#FFD700" />
+                  <Ionicons name="star" size={14} color="#FFD700" />
                   <Text style={styles.ratingText}>4.8</Text>
-                  <Text style={styles.reviewCount}>(124 reviews)</Text>
+                  <Text style={styles.reviewCount}>(124)</Text>
                 </View>
               </View>
             </View>
 
-            {/* Location Card */}
+            {/* Location Card - Optimized */}
             <View style={styles.fullScreenLocationCard}>
               <View style={styles.locationHeader}>
-                <Ionicons name="location" size={24} color={COLORS.primary} />
+                <Ionicons name="location" size={20} color={COLORS.primary} />
                 <Text style={styles.locationTitle}>Location</Text>
               </View>
               <Text style={styles.fullScreenAddress}>{selectedProperty.location?.address}</Text>
               <View style={styles.locationActions}>
                 <TouchableOpacity style={styles.locationActionButton}>
-                  <Ionicons name="map-outline" size={18} color={COLORS.primary} />
-                  <Text style={styles.locationActionText}>View on Map</Text>
+                  <Ionicons name="map-outline" size={16} color={COLORS.primary} />
+                  <Text style={styles.locationActionText}>View Map</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.locationActionButton}>
-                  <Ionicons name="car-outline" size={18} color={COLORS.primary} />
+                  <Ionicons name="car-outline" size={16} color={COLORS.primary} />
                   <Text style={styles.locationActionText}>
-                    {realDistance ? `${realDistance.toFixed(1)} km away` : '2.5 km away'}
+                    {realDistance ? `${realDistance.toFixed(1)} km` : '2.5 km'}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -979,97 +1162,119 @@ export default function Maps() {
               </Text>
             </View>
 
-            {/* Contact Information Card - Moved up */}
+            {/* Contact Information Card - Collapsible & Optimized */}
             <View style={styles.elegantContactCard}>
-              <View style={styles.contactCardHeader}>
+              <TouchableOpacity 
+                style={styles.contactCardHeader}
+                onPress={toggleHostContact}
+                activeOpacity={0.8}
+              >
                 <View style={styles.contactHeaderLeft}>
-                  <Ionicons name="person-circle" size={28} color="#8B5CF6" />
-                  <Text style={styles.elegantContactTitle}>Meet Your Host</Text>
+                  <Ionicons name="person-circle" size={24} color="#8B5CF6" />
+                  <Text style={styles.elegantContactTitle}>Owner Info</Text>
                 </View>
-                <View style={styles.hostRatingBadge}>
-                  <Ionicons name="star" size={14} color="#FFD700" />
-                  <Text style={styles.hostRating}>5.0</Text>
-                </View>
-              </View>
-              <View style={styles.elegantContactProfile}>
-                <View style={styles.elegantContactAvatar}>
-                  <Ionicons name="person" size={36} color="#fff" />
-                  <View style={styles.onlineIndicator} />
-                </View>
-                <View style={styles.elegantContactInfo}>
-                  <Text style={styles.elegantContactName}>Maria Santos</Text>
-                  <Text style={styles.elegantContactRole}>Property Owner • Superhost</Text>
-                  <View style={styles.hostStats}>
-                    <View style={styles.hostStat}>
-                      <Text style={styles.hostStatValue}>127</Text>
-                      <Text style={styles.hostStatLabel}>Reviews</Text>
-                    </View>
-                    <View style={styles.hostStatDivider} />
-                    <View style={styles.hostStat}>
-                      <Text style={styles.hostStatValue}>3 yrs</Text>
-                      <Text style={styles.hostStatLabel}>Hosting</Text>
-                    </View>
+                <View style={styles.contactHeaderRight}>
+                  <View style={styles.hostRatingBadge}>
+                    <Ionicons name="star" size={12} color="#FFD700" />
+                    <Text style={styles.hostRating}>5.0</Text>
                   </View>
+                  <Ionicons 
+                    name={showHostContact ? "chevron-up" : "chevron-down"} 
+                    size={20} 
+                    color="#6B7280" 
+                    style={{ marginLeft: 8 }}
+                  />
                 </View>
-                <TouchableOpacity style={styles.elegantMessageButton}>
-                  <Ionicons name="chatbubble-ellipses" size={22} color="#8B5CF6" />
-                </TouchableOpacity>
-              </View>
-              <Text style={styles.hostDescription}>
-                "Hi! I'm Maria, your local host. I'm passionate about providing comfortable stays and helping guests explore the best of our beautiful city."
-              </Text>
+              </TouchableOpacity>
+              
+              {showHostContact && (
+                <Animated.View style={{ opacity: hostContactAnim }}>
+                  <View style={styles.elegantContactProfile}>
+                    <View style={styles.elegantContactAvatar}>
+                      <Ionicons name="person" size={28} color="#fff" />
+                      <View style={styles.onlineIndicator} />
+                    </View>
+                    <View style={styles.elegantContactInfo}>
+                      <Text style={styles.elegantContactName}>{selectedProperty.postedBy || 'Property Owner'}</Text>
+                      <Text style={styles.elegantContactRole}>Owner • Verified</Text>
+                      <View style={styles.hostStats}>
+                        <View style={styles.hostStat}>
+                          <Text style={styles.hostStatValue}>100%</Text>
+                          <Text style={styles.hostStatLabel}>Response</Text>
+                        </View>
+                        <View style={styles.hostStatDivider} />
+                        <View style={styles.hostStat}>
+                          <Text style={styles.hostStatValue}>Fast</Text>
+                          <Text style={styles.hostStatLabel}>Reply</Text>
+                        </View>
+                      </View>
+                    </View>
+                    <TouchableOpacity style={styles.elegantMessageButton}>
+                      <Ionicons name="chatbubble-ellipses" size={20} color="#8B5CF6" />
+                    </TouchableOpacity>
+                  </View>
+                  <Text style={styles.hostDescription}>
+                    "Hi! I'm the owner of this property. Feel free to contact me for viewings or any questions."
+                  </Text>
+                </Animated.View>
+              )}
             </View>
 
-            {/* Features & Amenities Card - Moved down and enhanced */}
+            {/* Features & Amenities Card - Optimized */}
             <View style={styles.elegantFeaturesCard}>
               <View style={styles.featuresCardHeader}>
-                <Ionicons name="sparkles" size={26} color="#8B5CF6" />
-                <Text style={styles.elegantFeaturesTitle}>Premium Amenities</Text>
+                <Ionicons name="sparkles" size={22} color="#8B5CF6" />
+                <Text style={styles.elegantFeaturesTitle}>Amenities</Text>
               </View>
               <View style={styles.elegantFeaturesGrid}>
                 <View style={styles.elegantFeatureItem}>
                   <View style={styles.elegantFeatureIcon}>
-                    <Ionicons name="bed" size={24} color="#8B5CF6" />
+                    <Ionicons name="bed" size={18} color="#8B5CF6" />
                   </View>
-                  <Text style={styles.elegantFeatureTitle}>Luxury Furnishing</Text>
-                  <Text style={styles.elegantFeatureDesc}>Premium furniture & decor</Text>
+                  <View style={styles.featureTextContainer}>
+                    <Text style={styles.elegantFeatureTitle}>Furnished</Text>
+                    <Text style={styles.elegantFeatureDesc}>Premium decor</Text>
+                  </View>
                 </View>
                 <View style={styles.elegantFeatureItem}>
                   <View style={styles.elegantFeatureIcon}>
-                    <Ionicons name="wifi" size={24} color="#10B981" />
+                    <Ionicons name="wifi" size={18} color="#10B981" />
                   </View>
-                  <Text style={styles.elegantFeatureTitle}>High-Speed WiFi</Text>
-                  <Text style={styles.elegantFeatureDesc}>Fiber optic 500 Mbps</Text>
+                  <View style={styles.featureTextContainer}>
+                    <Text style={styles.elegantFeatureTitle}>WiFi</Text>
+                    <Text style={styles.elegantFeatureDesc}>500 Mbps</Text>
+                  </View>
                 </View>
                 <View style={styles.elegantFeatureItem}>
                   <View style={styles.elegantFeatureIcon}>
-                    <Ionicons name="car-sport" size={24} color="#F59E0B" />
+                    <Ionicons name="car-sport" size={18} color="#F59E0B" />
                   </View>
-                  <Text style={styles.elegantFeatureTitle}>Secure Parking</Text>
-                  <Text style={styles.elegantFeatureDesc}>Covered garage space</Text>
+                  <View style={styles.featureTextContainer}>
+                    <Text style={styles.elegantFeatureTitle}>Parking</Text>
+                    <Text style={styles.elegantFeatureDesc}>Covered garage</Text>
+                  </View>
                 </View>
               </View>
               <View style={styles.additionalAmenities}>
-                <Text style={styles.amenitiesTitle}>Additional Perks</Text>
                 <View style={styles.amenitiesList}>
                   <View style={styles.amenityTag}>
-                    <Ionicons name="shield-checkmark" size={16} color="#10B981" />
-                    <Text style={styles.amenityText}>24/7 Security</Text>
+                    <Ionicons name="shield-checkmark" size={12} color="#10B981" />
+                    <Text style={styles.amenityText}>Security</Text>
                   </View>
                   <View style={styles.amenityTag}>
-                    <Ionicons name="flash" size={16} color="#F59E0B" />
-                    <Text style={styles.amenityText}>Backup Power</Text>
+                    <Ionicons name="flash" size={12} color="#F59E0B" />
+                    <Text style={styles.amenityText}>Power</Text>
                   </View>
                   <View style={styles.amenityTag}>
-                    <Ionicons name="fitness" size={16} color="#8B5CF6" />
-                    <Text style={styles.amenityText}>Gym Access</Text>
+                    <Ionicons name="fitness" size={12} color="#8B5CF6" />
+                    <Text style={styles.amenityText}>Gym</Text>
                   </View>
                 </View>
               </View>
             </View>
 
             {/* Bottom spacing for actions */}
-            <View style={{ height: 180 }} />
+            <View style={{ height: 140 }} />
           </ScrollView>
 
           {/* Fixed Bottom Actions */}
@@ -1097,7 +1302,7 @@ export default function Maps() {
               onPress={startNavigation}
             >
               <Ionicons name="navigate" size={26} color="#fff" />
-              <Text style={styles.fullScreenNavigationText}>Get Directions</Text>
+              <Text style={styles.fullScreenNavigationText}>Turn by turn navigation</Text>
             </TouchableOpacity>
           </View>
 
@@ -1169,6 +1374,74 @@ export default function Maps() {
                   </TouchableOpacity>
                 ))}
               </ScrollView>
+            </Animated.View>
+          )}
+
+          {/* Full Screen Image Viewer Modal */}
+          {showImageViewer && (
+            <Animated.View
+              style={[
+                styles.imageViewerModal,
+                {
+                  opacity: imageViewerAnim,
+                  transform: [{
+                    scale: imageViewerAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.8, 1]
+                    })
+                  }]
+                }
+              ]}
+            >
+              <View style={styles.imageViewerHeader}>
+                <TouchableOpacity
+                  style={styles.imageViewerCloseButton}
+                  onPress={() => toggleImageViewer()}
+                >
+                  <Ionicons name="close" size={28} color="#fff" />
+                </TouchableOpacity>
+                <Text style={styles.imageViewerCounter}>
+                  {currentImageIndex + 1} / {selectedProperty.images?.length || 1}
+                </Text>
+                <TouchableOpacity style={styles.imageViewerShareButton}>
+                  <Ionicons name="share-outline" size={24} color="#fff" />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                onScroll={handleImageScroll}
+                scrollEventThrottle={16}
+                contentOffset={{ x: currentImageIndex * 400, y: 0 }}
+                style={styles.imageViewerScroll}
+              >
+                {(selectedProperty.images && selectedProperty.images.length > 0 ? selectedProperty.images : [getImageUri(selectedProperty)]).map((image, index) => (
+                  <View key={index} style={styles.imageViewerSlide}>
+                    <Image
+                      source={{ uri: image }}
+                      style={styles.imageViewerImage}
+                      resizeMode="contain"
+                    />
+                  </View>
+                ))}
+              </ScrollView>
+
+              {/* Image Viewer Pagination */}
+              {selectedProperty.images && selectedProperty.images.length > 1 && (
+                <View style={styles.imageViewerPagination}>
+                  {selectedProperty.images.map((_, index) => (
+                    <View
+                      key={index}
+                      style={[
+                        styles.imageViewerDot,
+                        currentImageIndex === index && styles.imageViewerDotActive
+                      ]}
+                    />
+                  ))}
+                </View>
+              )}
             </Animated.View>
           )}
         </Animated.View>
@@ -1309,7 +1582,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: '#fff',
+    backgroundColor: '#FAFBFC',
     zIndex: 1000,
   },
   navigationOverlay: {
@@ -1334,109 +1607,147 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     paddingTop: 50,
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-    background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.9), rgba(168, 85, 247, 0.8), rgba(147, 51, 234, 0.9))',
-    backgroundColor: 'rgba(139, 92, 246, 0.85)',
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.2)',
+    overflow: 'hidden',
   },
   backButton: {
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    backgroundColor: 'rgba(248, 250, 252, 0.8)',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
+    borderColor: 'rgba(229, 231, 235, 0.5)',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 8,
+    elevation: 3,
   },
   fullScreenHeaderTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#fff',
-    textAlign: 'center',
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+    letterSpacing: -0.3,
   },
   headerFavoriteButton: {
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    backgroundColor: 'rgba(254, 242, 242, 0.9)',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
+    borderColor: 'rgba(254, 226, 226, 0.5)',
+    shadowColor: '#E91E63',
+    shadowOpacity: 0.2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 8,
+    elevation: 3,
   },
-  fullScreenImageContainer: {
+  imageSliderContainer: {
     position: 'relative',
-    height: 300,
+    height: 280,
     width: '100%',
+    backgroundColor: '#000',
   },
-  fullScreenPropertyImage: {
+  imageSlider: {
+    flex: 1,
+  },
+  imageSlide: {
+    width: 400,
+    height: 280,
+  },
+  sliderImage: {
     width: '100%',
     height: '100%',
   },
-  fullScreenImageGradient: {
+  imageCounterBadge: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    top: 16,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    gap: 6,
   },
-  fullScreenImageOverlay: {
+  imageCounterText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  propertyBadgeOverlay: {
     position: 'absolute',
-    bottom: 20,
-    left: 20,
-    right: 20,
+    bottom: 16,
+    left: 16,
   },
   propertyBadgeFullScreen: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 25,
-    alignSelf: 'flex-start',
-    backdropFilter: 'blur(10px)',
+    backgroundColor: 'rgba(139, 92, 246, 0.9)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    gap: 6,
   },
   badgeTextFullScreen: {
     color: '#fff',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
-    marginLeft: 8,
     textTransform: 'capitalize',
+  },
+  paginationDots: {
+    position: 'absolute',
+    bottom: 16,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  paginationDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.5)',
+  },
+  paginationDotActive: {
+    width: 20,
+    backgroundColor: '#fff',
   },
   fullScreenContentScroll: {
     flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 8,
+    paddingHorizontal: 16,
+    paddingTop: 6,
   },
   fullScreenPropertyHeader: {
-    paddingTop: 32,
-    paddingBottom: 24,
+    paddingTop: 20,
+    paddingBottom: 16,
     paddingHorizontal: 4,
   },
   propertyTitleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 20,
+    marginBottom: 14,
   },
   propertyTitleContainer: {
     flex: 1,
     paddingRight: 16,
   },
   fullScreenPropertyTitle: {
-    fontSize: 28,
+    fontSize: 20,
     fontWeight: '800',
     color: '#111827',
-    marginBottom: 8,
-    lineHeight: 34,
+    marginBottom: 6,
+    lineHeight: 28,
     letterSpacing: -0.5,
   },
   propertyBadgeContainer: {
@@ -1447,24 +1758,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#EEF2FF',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: '#C7D2FE',
   },
   propertyTypeText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     color: COLORS.primary,
-    marginLeft: 6,
+    marginLeft: 5,
     textTransform: 'capitalize',
   },
   favoriteButtonLarge: {
     backgroundColor: '#FEF2F2',
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
@@ -1480,43 +1791,43 @@ const styles = StyleSheet.create({
     alignItems: 'baseline',
   },
   fullScreenPrice: {
-    fontSize: 32,
+    fontSize: 22,
     fontWeight: '800',
     color: COLORS.primary,
-    letterSpacing: -1,
+    letterSpacing: -0.8,
   },
   fullScreenPriceLabel: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#6B7280',
-    marginLeft: 8,
+    marginLeft: 6,
     fontWeight: '500',
   },
   ratingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFBEB',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: '#FEF3C7',
   },
   ratingText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     color: '#92400E',
-    marginLeft: 4,
+    marginLeft: 3,
   },
   reviewCount: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#78716C',
-    marginLeft: 4,
+    marginLeft: 3,
   },
   modernCard: {
     backgroundColor: '#fff',
-    borderRadius: 20,
-    padding: 24,
-    marginBottom: 20,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 12,
     marginHorizontal: 4,
     shadowColor: '#000',
     shadowOpacity: 0.08,
@@ -1529,20 +1840,20 @@ const styles = StyleSheet.create({
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   cardTitle: {
-    fontSize: 20,
+    fontSize: 15,
     fontWeight: '700',
     color: '#111827',
-    marginLeft: 12,
+    marginLeft: 10,
     letterSpacing: -0.3,
   },
   fullScreenLocationCard: {
     backgroundColor: '#fff',
-    borderRadius: 20,
-    padding: 24,
-    marginBottom: 20,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 12,
     marginHorizontal: 4,
     shadowColor: '#000',
     shadowOpacity: 0.08,
@@ -1555,49 +1866,49 @@ const styles = StyleSheet.create({
   locationHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   locationTitle: {
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: '700',
     color: '#111827',
-    marginLeft: 12,
+    marginLeft: 10,
     letterSpacing: -0.3,
   },
   fullScreenAddress: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#4B5563',
-    lineHeight: 24,
-    marginBottom: 16,
+    lineHeight: 21,
+    marginBottom: 12,
     fontWeight: '500',
   },
   locationActions: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
   },
   locationActionButton: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#F8FAFC',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: '#E5E7EB',
     flex: 1,
   },
   locationActionText: {
-    fontSize: 14,
+    fontSize: 12,
     color: COLORS.primary,
     fontWeight: '600',
-    marginLeft: 8,
+    marginLeft: 6,
   },
   modernDescription: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#4B5563',
-    lineHeight: 26,
+    lineHeight: 22,
     fontWeight: '400',
-    marginBottom: 16,
+    marginBottom: 0,
   },
   readMoreButton: {
     flexDirection: 'row',
@@ -1672,15 +1983,15 @@ const styles = StyleSheet.create({
   },
   elegantContactCard: {
     backgroundColor: '#fff',
-    borderRadius: 24,
-    padding: 24,
-    marginBottom: 20,
+    borderRadius: 20,
+    padding: 14,
+    marginBottom: 12,
     marginHorizontal: 4,
     shadowColor: '#8B5CF6',
     shadowOpacity: 0.12,
-    shadowOffset: { width: 0, height: 8 },
-    shadowRadius: 24,
-    elevation: 12,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 16,
+    elevation: 8,
     borderWidth: 1,
     borderColor: '#F8FAFC',
   },
@@ -1688,50 +1999,57 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 12,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
   },
   contactHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
   },
+  contactHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   elegantContactTitle: {
-    fontSize: 22,
-    fontWeight: '800',
+    fontSize: 18,
+    fontWeight: '700',
     color: '#111827',
-    marginLeft: 12,
-    letterSpacing: -0.4,
+    marginLeft: 10,
+    letterSpacing: -0.3,
   },
   hostRatingBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFBEB',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: '#FEF3C7',
   },
   hostRating: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
     color: '#92400E',
-    marginLeft: 4,
+    marginLeft: 3,
   },
   elegantContactProfile: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   elegantContactAvatar: {
     position: 'relative',
     backgroundColor: 'linear-gradient(135deg, #8B5CF6, #A855F7)',
     backgroundColor: '#8B5CF6',
-    width: 70,
-    height: 70,
-    borderRadius: 35,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 16,
+    marginRight: 12,
     shadowColor: '#8B5CF6',
     shadowOpacity: 0.3,
     shadowOffset: { width: 0, height: 4 },
@@ -1742,27 +2060,27 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 2,
     right: 2,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
     backgroundColor: '#10B981',
-    borderWidth: 3,
+    borderWidth: 2,
     borderColor: '#fff',
   },
   elegantContactInfo: {
     flex: 1,
   },
   elegantContactName: {
-    fontSize: 20,
-    fontWeight: '800',
+    fontSize: 17,
+    fontWeight: '700',
     color: '#111827',
-    marginBottom: 4,
-    letterSpacing: -0.3,
+    marginBottom: 3,
+    letterSpacing: -0.2,
   },
   elegantContactRole: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#6B7280',
-    marginBottom: 12,
+    marginBottom: 8,
     fontWeight: '500',
   },
   hostStats: {
@@ -1799,21 +2117,21 @@ const styles = StyleSheet.create({
     borderColor: '#E5E7EB',
   },
   hostDescription: {
-    fontSize: 15,
+    fontSize: 13,
     color: '#4B5563',
-    lineHeight: 22,
+    lineHeight: 20,
     fontStyle: 'italic',
     backgroundColor: '#F8FAFC',
-    padding: 16,
-    borderRadius: 16,
-    borderLeftWidth: 4,
+    padding: 12,
+    borderRadius: 14,
+    borderLeftWidth: 3,
     borderLeftColor: '#8B5CF6',
   },
   elegantFeaturesCard: {
     backgroundColor: '#fff',
-    borderRadius: 24,
-    padding: 24,
-    marginBottom: 20,
+    borderRadius: 20,
+    padding: 14,
+    marginBottom: 12,
     marginHorizontal: 4,
     shadowColor: '#000',
     shadowOpacity: 0.08,
@@ -1826,89 +2144,93 @@ const styles = StyleSheet.create({
   featuresCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 24,
-    paddingBottom: 16,
+    marginBottom: 14,
+    paddingBottom: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#F3F4F6',
   },
   elegantFeaturesTitle: {
-    fontSize: 22,
-    fontWeight: '800',
+    fontSize: 18,
+    fontWeight: '700',
     color: '#111827',
-    marginLeft: 12,
-    letterSpacing: -0.4,
+    marginLeft: 10,
+    letterSpacing: -0.3,
   },
   elegantFeaturesGrid: {
-    gap: 16,
-    marginBottom: 24,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 12,
   },
   elegantFeatureItem: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FAFBFC',
-    padding: 20,
-    borderRadius: 20,
+    padding: 10,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: '#F1F3F4',
   },
   elegantFeatureIcon: {
     backgroundColor: '#fff',
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 16,
+    marginRight: 8,
     shadowColor: '#000',
     shadowOpacity: 0.06,
     shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 8,
-    elevation: 3,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  featureTextContainer: {
+    flex: 1,
   },
   elegantFeatureTitle: {
-    fontSize: 16,
+    fontSize: 12,
     fontWeight: '700',
     color: '#111827',
-    marginBottom: 2,
-    flex: 1,
+    marginBottom: 1,
   },
   elegantFeatureDesc: {
-    fontSize: 13,
+    fontSize: 10,
     color: '#6B7280',
     fontWeight: '500',
-    flex: 1,
   },
   additionalAmenities: {
-    paddingTop: 20,
+    paddingTop: 10,
     borderTopWidth: 1,
     borderTopColor: '#F3F4F6',
   },
   amenitiesTitle: {
-    fontSize: 16,
+    fontSize: 12,
     fontWeight: '700',
     color: '#374151',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   amenitiesList: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: 8,
   },
   amenityTag: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#F9FAFB',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: '#E5E7EB',
   },
   amenityText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     color: '#374151',
-    marginLeft: 6,
+    marginLeft: 5,
   },
   fullScreenBottomActions: {
     position: 'absolute',
@@ -1916,13 +2238,13 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: '#fff',
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 20,
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 14,
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
-    borderRadius: 20,
-    marginHorizontal: 10,
+    borderRadius: 16,
+    marginHorizontal: 8,
     shadowColor: '#000',
     shadowOpacity: 0.15,
     shadowOffset: { width: 0, height: -4 },
@@ -1931,17 +2253,17 @@ const styles = StyleSheet.create({
   },
   fullScreenActionsRow: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 12,
+    gap: 8,
+    marginBottom: 8,
   },
   fullScreenPrimaryButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.primary,
-    paddingVertical: 14,
-    borderRadius: 16,
+    backgroundColor: COLORS.secondary,
+    paddingVertical: 12,
+    borderRadius: 14,
     shadowColor: COLORS.primary,
     shadowOpacity: 0.3,
     shadowOffset: { width: 0, height: 4 },
@@ -1950,9 +2272,9 @@ const styles = StyleSheet.create({
   },
   fullScreenPrimaryButtonText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: 'bold',
-    marginLeft: 8,
+    marginLeft: 6,
   },
   fullScreenSecondaryButton: {
     flex: 1,
@@ -1962,22 +2284,22 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderWidth: 2,
     borderColor: COLORS.primary,
-    paddingVertical: 14,
-    borderRadius: 16,
+    paddingVertical: 12,
+    borderRadius: 14,
   },
   fullScreenSecondaryButtonText: {
     color: COLORS.primary,
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: 'bold',
-    marginLeft: 8,
+    marginLeft: 6,
   },
   fullScreenNavigationButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#8B5CF6',
-    paddingVertical: 16,
-    borderRadius: 16,
+    paddingVertical: 13,
+    borderRadius: 14,
     shadowColor: '#8B5CF6',
     shadowOpacity: 0.3,
     shadowOffset: { width: 0, height: 4 },
@@ -1986,9 +2308,9 @@ const styles = StyleSheet.create({
   },
   fullScreenNavigationText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: 'bold',
-    marginLeft: 8,
+    marginLeft: 6,
   },
   refreshButton: {
     position: 'absolute',
@@ -2634,5 +2956,76 @@ const styles = StyleSheet.create({
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
     borderTopColor: '#4CAF50', // This will be overridden by the dynamic color
+  },
+  // Image Viewer Modal Styles
+  imageViewerModal: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#000',
+    zIndex: 2000,
+  },
+  imageViewerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 50,
+    paddingBottom: 16,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    zIndex: 10,
+  },
+  imageViewerCloseButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  imageViewerCounter: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  imageViewerShareButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  imageViewerScroll: {
+    flex: 1,
+  },
+  imageViewerSlide: {
+    width: 400,
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  imageViewerImage: {
+    width: '100%',
+    height: '100%',
+  },
+  imageViewerPagination: {
+    position: 'absolute',
+    bottom: 40,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    gap: 10,
+  },
+  imageViewerDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255,255,255,0.4)',
+  },
+  imageViewerDotActive: {
+    width: 24,
+    backgroundColor: '#fff',
   },
 });
