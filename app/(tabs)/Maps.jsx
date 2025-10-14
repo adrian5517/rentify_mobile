@@ -280,110 +280,31 @@ export default function Maps() {
           return;
         }
 
-        // 2. Test ML API connectivity first
-        console.log('🧪 Testing K-means API connectivity...');
-        const testData = {
-          price: 10000,
-          latitude: location.latitude,
-          longitude: location.longitude
-        };
-
-        const testRes = await fetch('https://new-train-ml.onrender.com/predict_kmeans', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(testData),
-        });
-
-        if (!testRes.ok) {
-          throw new Error(`ML API test failed: ${testRes.status}`);
-        }
-
-        const testResult = await testRes.json();
-        console.log('✅ ML API test successful:', testResult);
-
-        // 3. Process properties in batches to get K-means clusters
-        console.log('🔄 Processing properties for K-means clustering...');
-        const clusteredProperties = [];
-        const batchSize = 5; // Process in smaller batches to avoid overwhelming the API
-
-        for (let i = 0; i < properties.length; i += batchSize) {
-          const batch = properties.slice(i, i + batchSize);
-          console.log(`📦 Processing batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(properties.length/batchSize)}`);
-
-          const batchPromises = batch.map(async (property) => {
-            try {
-              // Use property's actual price and coordinates for clustering
-              // Handle both old format (latitude/longitude) and new format (location.latitude/longitude)
-              const lat = property.location?.latitude || property.latitude || location.latitude;
-              const lng = property.location?.longitude || property.longitude || location.longitude;
-              
-              const clusterData = {
-                price: property.price || 10000,
-                latitude: lat,
-                longitude: lng
-              };
-
-              const response = await fetch('https://new-train-ml.onrender.com/predict_kmeans', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(clusterData),
-              });
-
-              if (!response.ok) {
-                console.log(`⚠️ ML API failed for property ${property._id}`);
-                // Fallback to correct price-based clustering: 2k-4k, 4k-7k, 7k+
-                const cluster = property.price <= 4000 ? 0 : property.price <= 7000 ? 1 : 2;
-                return { ...property, cluster };
-              }
-
-              const result = await response.json();
-              // Override ML API result with our price-based clustering to ensure proper distribution
-              const cluster = property.price <= 4000 ? 0 : property.price <= 7000 ? 1 : 2;
-
-              console.log(`✅ Property ${property.name || property._id}: cluster ${cluster} (₱${property.price}) [ML suggested: ${result.cluster_id}]`);
-              
-              // Ensure location object exists
-              const normalizedProperty = {
-                ...property,
-                cluster: cluster,
-                // Normalize location format
-                location: property.location || {
-                  latitude: property.latitude || lat,
-                  longitude: property.longitude || lng,
-                  address: property.address || property.location?.address || 'Naga City'
-                }
-              };
-              
-              return normalizedProperty;
-            } catch (error) {
-              console.log(`❌ Error clustering property ${property.name || property._id}:`, error.message);
-              // Fallback to correct price-based clustering: 2k-4k, 4k-7k, 7k+
-              const cluster = property.price <= 4000 ? 0 : property.price <= 7000 ? 1 : 2;
-              
-              // Ensure location object exists
-              const lat = property.location?.latitude || property.latitude || location.latitude;
-              const lng = property.location?.longitude || property.longitude || location.longitude;
-              
-              return { 
-                ...property, 
-                cluster,
-                location: property.location || {
-                  latitude: lat,
-                  longitude: lng,
-                  address: property.address || property.location?.address || 'Naga City'
-                }
-              };
+        // 2. Use fast price-based clustering (skip ML API to avoid delays)
+        console.log('🔄 Applying price-based clustering...');
+        
+        // Price ranges: Low Budget (≤4k), Mid Range (4k-7k), High End (>7k)
+        const clusteredProperties = properties.map(property => {
+          // Handle both old format (latitude/longitude) and new format (location.latitude/longitude)
+          const lat = property.location?.latitude || property.latitude || location.latitude;
+          const lng = property.location?.longitude || property.longitude || location.longitude;
+          
+          // Price-based clustering: 0=Low Budget (≤4k), 1=Mid Range (4k-7k), 2=High End (>7k)
+          const cluster = property.price <= 4000 ? 0 : property.price <= 7000 ? 1 : 2;
+          
+          console.log(`✅ ${property.name}: ₱${property.price} → ${['Low Budget', 'Mid Range', 'High End'][cluster]}`);
+          
+          // Ensure location object exists
+          return {
+            ...property,
+            cluster,
+            location: property.location || {
+              latitude: lat,
+              longitude: lng,
+              address: property.address || property.location?.address || 'Naga City'
             }
-          });
-
-          const batchResults = await Promise.all(batchPromises);
-          clusteredProperties.push(...batchResults);
-
-          // Add delay between batches to avoid rate limiting
-          if (i + batchSize < properties.length) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
-          }
-        }
+          };
+        });
 
         console.log(`✅ Successfully clustered ${clusteredProperties.length} properties`);
         
@@ -469,9 +390,21 @@ export default function Maps() {
           const fallbackRes = await fetch('https://rentify-server-ge0f.onrender.com/api/properties');
           
           if (fallbackRes.ok) {
-            const fallbackProperties = await fallbackRes.json();
+            const data = await fallbackRes.json();
             
-            // Apply correct price-based clustering as fallback: 2k-4k, 4k-7k, 7k+
+            // Handle different response formats
+            let fallbackProperties = [];
+            if (Array.isArray(data)) {
+              fallbackProperties = data;
+            } else if (data.properties && Array.isArray(data.properties)) {
+              fallbackProperties = data.properties;
+            } else if (data.success && data.properties) {
+              fallbackProperties = data.properties;
+            }
+            
+            console.log(`📦 Fallback got ${fallbackProperties.length} properties`);
+            
+            // Apply correct price-based clustering as fallback
             const clusteredFallback = fallbackProperties.map(property => {
               const lat = property.location?.latitude || property.latitude || 13.6218;
               const lng = property.location?.longitude || property.longitude || 123.1815;
@@ -562,7 +495,7 @@ export default function Maps() {
   // Filter properties based on selected cluster
   const filteredProperties = (() => {
     if (!mlProperties.length) {
-      console.log('❌ No ML properties available for filtering');
+      // Don't log during initial load - this is expected
       return [];
     }
     
