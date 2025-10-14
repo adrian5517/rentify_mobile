@@ -29,7 +29,9 @@ export const ENDPOINTS = {
   
   // Messages
   MESSAGES: {
+    BASE: '/messages',
     CONVERSATIONS: '/messages/conversations',
+    CONVERSATION: '/messages/conversation',
     SEND: '/messages',
   },
   
@@ -51,8 +53,8 @@ export const ENDPOINTS = {
 
 // Cluster Classification
 export const CLUSTERS = {
-  LOW_BUDGET: { id: 0, label: 'Low Budget', range: '₱2,000 - ₱4,000', color: '#4CAF50' },
-  MID_RANGE: { id: 1, label: 'Mid Range', range: '₱4,001 - ₱7,000', color: '#FFC107' },
-  HIGH_END: { id: 2, label: 'High End', range: '₱7,001+', color: '#E91E63' },
+  LOW_BUDGET: { id: 0, label: 'Low Budget', range: '₱1,000 - ₱3,000', color: '#4CAF50' },
+  MID_RANGE: { id: 1, label: 'Mid Range', range: '₱3,001 - ₱5,000', color: '#FFC107' },
+  HIGH_END: { id: 2, label: 'High End', range: '₱5,001+', color: '#E91E63' },
   ALL: { id: 3, label: 'All Properties', color: '#2563eb' },
 };

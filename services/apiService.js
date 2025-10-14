@@ -1,4 +1,5 @@
 import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL, ML_API_URL, UPLOAD_URL, ENDPOINTS } from '../constant/api';
 
 /**
@@ -393,31 +394,212 @@ class RentifyApiService {
   // ==================== Messages ====================
 
   /**
-   * Get all conversations
+   * Get all conversations for current user
+   * Web implementation: Fetch all users, then check who has messages
    */
   async getConversations() {
     try {
-      const response = await this.api.get(ENDPOINTS.MESSAGES.CONVERSATIONS);
-      const conversations = response.data.conversations || [];
+      // Get current user from AsyncStorage (stored during login)
+      const userStr = await AsyncStorage.getItem('user');
+      if (!userStr) {
+        return { success: false, error: 'Not authenticated', conversations: [] };
+      }
       
-      return { success: true, conversations };
+      const user = JSON.parse(userStr);
+      const userId = user._id;
+
+      console.log(`📥 Building conversations list for user: ${userId}`);
+      
+      // Step 1: Fetch all users using getAllUsers method
+      const usersResult = await this.getAllUsers();
+      if (!usersResult.success) {
+        console.error('❌ Failed to fetch users:', usersResult.error);
+        return { success: false, error: usersResult.error, conversations: [] };
+      }
+      
+      const allUsers = usersResult.users || [];
+      console.log(`👥 Found ${allUsers.length} total users`);
+      
+      // Step 2: For each user, check if there are messages
+      const conversationsWithMessages = [];
+      
+      for (const otherUser of allUsers) {
+        // Skip self
+        if (otherUser._id === userId) continue;
+        
+        try {
+          // Fetch messages between current user and this user
+          const messagesResponse = await this.api.get(`/messages/${userId}/${otherUser._id}`);
+          const messages = messagesResponse.data || [];
+          
+          // If there are messages, add to conversations
+          if (messages.length > 0) {
+            const lastMessage = messages[messages.length - 1];
+            
+            conversationsWithMessages.push({
+              id: otherUser._id,
+              otherUser: {
+                _id: otherUser._id,
+                name: otherUser.fullName || otherUser.username,
+                username: otherUser.username,
+                profilePicture: otherUser.profilePicture,
+                email: otherUser.email
+              },
+              lastMessage: {
+                _id: lastMessage._id,
+                message: lastMessage.message,
+                sender: lastMessage.sender,
+                createdAt: lastMessage.createdAt
+              },
+              unreadCount: 0, // Calculate if needed
+              updatedAt: lastMessage.createdAt,
+              lastMessageTime: new Date(lastMessage.createdAt).getTime()
+            });
+          }
+        } catch (error) {
+          // Skip this user if error fetching messages (404 means no messages)
+          if (error.response?.status !== 404) {
+            console.log(`⚠️ Error checking messages with user ${otherUser.username}:`, error.message);
+          }
+        }
+      }
+      
+      // Step 3: Sort by most recent message
+      conversationsWithMessages.sort((a, b) => b.lastMessageTime - a.lastMessageTime);
+      
+      console.log(`✅ Found ${conversationsWithMessages.length} conversations`);
+      
+      return { 
+        success: true, 
+        conversations: conversationsWithMessages
+      };
     } catch (error) {
-      return { success: false, error: error.message, conversations: [] };
+      console.error('❌ Error building conversations:', error.response?.data || error.message);
+      
+      return { 
+        success: false, 
+        error: error.response?.data?.message || error.message, 
+        conversations: [] 
+      };
+    }
+  }
+
+  /**
+   * Get all users (for contacts list)
+   */
+  async getAllUsers() {
+    try {
+      const response = await this.api.get('/auth/users');
+      return { success: true, users: response.data.users || [] };
+    } catch (error) {
+      return { success: false, error: error.message, users: [] };
+    }
+  }
+
+  /**
+   * Get messages between current user and another user
+   * Backend endpoint: GET /api/messages/:userId1/:otherUserId
+   */
+  async getMessagesBetweenUsers(otherUserId) {
+    try {
+      // Get current user from AsyncStorage (stored during login)
+      const userStr = await AsyncStorage.getItem('user');
+      if (!userStr) {
+        return { success: false, error: 'Not authenticated', messages: [] };
+      }
+      const user = JSON.parse(userStr);
+      const userId = user._id;
+
+      // Call backend endpoint: /messages/:userId1/:otherUserId
+      const response = await this.api.get(`/messages/${userId}/${otherUserId}`);
+      return { success: true, messages: response.data || [], data: response.data };
+    } catch (error) {
+      return { success: false, error: error.message, messages: [] };
+    }
+  }
+
+  /**
+   * Get unread message count for current user
+   */
+  async getUnreadCount() {
+    try {
+      const response = await this.api.get('/messages/unread');
+      return { success: true, count: response.data.count || 0 };
+    } catch (error) {
+      return { success: false, error: error.message, count: 0 };
+    }
+  }
+
+  /**
+   * Get messages in a conversation
+   */
+  async getMessages(conversationId) {
+    try {
+      const response = await this.api.get(`${ENDPOINTS.MESSAGES.CONVERSATION}/${conversationId}`);
+      const messages = response.data.messages || [];
+      
+      return { success: true, messages };
+    } catch (error) {
+      return { success: false, error: error.message, messages: [] };
     }
   }
 
   /**
    * Send message
+   * Backend endpoint: POST /api/messages/send
+   * Backend expects: { senderId, receiverId, text }
    */
-  async sendMessage({ recipientId, propertyId, message }) {
+  async sendMessage({ recipientId, propertyId, content, text }) {
     try {
-      const response = await this.api.post(ENDPOINTS.MESSAGES.SEND, {
-        recipientId,
-        propertyId,
-        message,
-      });
+      // Get current user from AsyncStorage (stored during login)
+      const userStr = await AsyncStorage.getItem('user');
+      if (!userStr) {
+        return { success: false, error: 'Not authenticated' };
+      }
+      const user = JSON.parse(userStr);
+
+      // Format data for your backend
+      const messageData = {
+        senderId: user._id,
+        receiverId: recipientId,
+        text: text || content || '', // Support both 'text' and 'content'
+      };
+
+      // Call backend endpoint: POST /messages/send
+      const response = await this.api.post('/messages/send', messageData);
       
-      return { success: true, message: response.data };
+      return { 
+        success: true, 
+        data: response.data,
+        message: response.data // Alias for backward compatibility
+      };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Mark messages as read
+   * Backend endpoint: POST /api/messages/mark-read
+   */
+  async markAsRead(messageId) {
+    try {
+      await this.api.post('/messages/mark-read', { messageId });
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Get user profile
+   */
+  async getUserProfile() {
+    try {
+      const response = await this.api.get('/users/profile');
+      const user = response.data.user;
+      
+      return { success: true, user };
     } catch (error) {
       return { success: false, error: error.message };
     }

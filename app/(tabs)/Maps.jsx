@@ -1,11 +1,14 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { StyleSheet, View, Alert, Text, TouchableOpacity, Image, ScrollView, Animated, Dimensions } from 'react-native';
+import { StyleSheet, View, Alert, Text, TouchableOpacity, Image, ScrollView, Animated, Dimensions, ActivityIndicator } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
 import MapboxDirections from '@mapbox/mapbox-sdk/services/directions';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import COLORS from '../../constant/colors';
+import ApiService from '../../services/apiService';
+import { useAuthStore } from '../../store/authStore';
 
 // Use require for consistent asset loading
 
@@ -34,6 +37,8 @@ const getImageUri = (property) => {
 };
 
 export default function Maps() {
+  const router = useRouter();
+  const { user } = useAuthStore();
   const [location, setLocation] = useState(null);
   const [mlProperties, setMlProperties] = useState([]);
   const [routeCoords, setRouteCoords] = useState([]);
@@ -44,6 +49,7 @@ export default function Maps() {
   const [refresh, setRefresh] = useState(false);
   const [selectedCluster, setSelectedCluster] = useState(3); // Default to "All Properties"
   const [loadingML, setLoadingML] = useState(false);
+  const [contactingOwner, setContactingOwner] = useState(false);
   const mapRef = useRef(null);
   const [isExpanded, setIsExpanded] = useState(false);
   const expandAnim = useRef(new Animated.Value(0)).current;
@@ -667,6 +673,75 @@ export default function Maps() {
     }).start();
   };
 
+  // Function to handle contacting the property owner
+  const handleContactOwner = async () => {
+    if (!user) {
+      Alert.alert(
+        'Login Required',
+        'Please login to contact property owners',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => router.push('/(auth)') }
+        ]
+      );
+      return;
+    }
+
+    if (!selectedProperty) {
+      Alert.alert('Error', 'No property selected');
+      return;
+    }
+
+    // Check if property has owner information
+    const ownerId = selectedProperty.postedBy?._id || selectedProperty.postedBy;
+    if (!ownerId) {
+      Alert.alert('Error', 'Owner information not available');
+      return;
+    }
+
+    setContactingOwner(true);
+
+    try {
+      console.log('📤 Contacting property owner...', {
+        recipientId: ownerId,
+        propertyId: selectedProperty._id,
+        propertyName: selectedProperty.name
+      });
+
+      // Send initial message to property owner
+      const response = await ApiService.sendMessage({
+        recipientId: ownerId,
+        propertyId: selectedProperty._id,
+        content: `Hi! I'm interested in your property "${selectedProperty.name}". Can you provide more information?`
+      });
+
+      if (response.success) {
+        console.log('✅ Message sent successfully:', response.data);
+        
+        // Navigate to chat screen with the conversation details
+        router.push({
+          pathname: '/ChatScreen',
+          params: {
+            conversationId: response.data.conversation,
+            otherUserId: ownerId,
+            otherUserName: selectedProperty.postedBy?.name || selectedProperty.postedBy || 'Property Owner',
+            otherUserAvatar: selectedProperty.postedBy?.profilePicture || '',
+            propertyId: selectedProperty._id,
+            propertyName: selectedProperty.name
+          }
+        });
+      } else {
+        console.error('❌ Failed to send message:', response.error);
+        Alert.alert('Error', 'Failed to contact owner. Please try again.');
+      }
+    } catch (error) {
+      console.error('❌ Error contacting owner:', error);
+      Alert.alert('Error', 'Failed to contact owner. Please try again.');
+    } finally {
+      setContactingOwner(false);
+    }
+  };
+
   // Function to handle image scroll
   const handleImageScroll = (event) => {
     const scrollPosition = event.nativeEvent.contentOffset.x;
@@ -1214,11 +1289,24 @@ export default function Maps() {
           <View style={styles.fullScreenBottomActions}>
             <View style={styles.fullScreenActionsRow}>
               <TouchableOpacity 
-                style={styles.fullScreenPrimaryButton} 
-                onPress={() => alert(`Contact owner for ${selectedProperty.name}`)}
+                style={[
+                  styles.fullScreenPrimaryButton,
+                  contactingOwner && styles.buttonDisabled
+                ]} 
+                onPress={handleContactOwner}
+                disabled={contactingOwner}
               >
-                <Ionicons name="call" size={24} color="#fff" />
-                <Text style={styles.fullScreenPrimaryButtonText}>Contact Owner</Text>
+                {contactingOwner ? (
+                  <>
+                    <ActivityIndicator size="small" color="#fff" />
+                    <Text style={styles.fullScreenPrimaryButtonText}>Connecting...</Text>
+                  </>
+                ) : (
+                  <>
+                    <Ionicons name="chatbubble-ellipses" size={24} color="#fff" />
+                    <Text style={styles.fullScreenPrimaryButtonText}>Contact Owner</Text>
+                  </>
+                )}
               </TouchableOpacity>
               
               <TouchableOpacity 
@@ -2202,6 +2290,10 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowRadius: 12,
     elevation: 6,
+  },
+  buttonDisabled: {
+    backgroundColor: '#9CA3AF',
+    shadowOpacity: 0.15,
   },
   fullScreenPrimaryButtonText: {
     color: '#fff',
