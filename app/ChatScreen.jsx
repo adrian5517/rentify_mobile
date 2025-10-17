@@ -18,12 +18,16 @@ import * as ImagePicker from 'expo-image-picker';
 import ApiService from '../services/apiService';
 import WebSocketService from '../services/websocketService';
 import { useAuthStore } from '../store/authStore';
+import normalizeAvatar from './utils/normalizeAvatar';
 import COLORS from '../constant/colors';
 
 export default function ChatScreen() {
   const router = useRouter();
+  // Use same destructuring as profile tab for consistency
   const { user } = useAuthStore();
   const params = useLocalSearchParams();
+
+  // use normalizeAvatar helper imported from app/utils/normalizeAvatar
   
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -33,7 +37,17 @@ export default function ChatScreen() {
   // User and property details from navigation params
   const otherUserId = params.otherUserId;
   const otherUserName = params.otherUserName || 'User';
-  const otherUserAvatar = params.otherUserAvatar;
+  let otherUserAvatar = params.otherUserAvatar;
+
+  // Normalize passed avatar (allow dicebear and relative paths)
+  if (otherUserAvatar) {
+    if (otherUserAvatar.includes('api.dicebear.com') && otherUserAvatar.includes('/svg?')) {
+      otherUserAvatar = otherUserAvatar.replace('/svg?', '/png?');
+    }
+    if (!otherUserAvatar.startsWith('http')) {
+      otherUserAvatar = `https://rentify-server-ge0f.onrender.com${otherUserAvatar}`;
+    }
+  }
   const propertyId = params.propertyId;
   const propertyName = params.propertyName;
 
@@ -62,7 +76,7 @@ export default function ChatScreen() {
           user: {
             _id: msg.sender?._id || msg.sender,
             name: msg.sender?.name || 'User',
-            avatar: msg.sender?.profilePicture || '',
+            avatar: normalizeAvatar(msg.sender?.profilePicture || ''),
           },
           sent: true,
           received: msg.read,
@@ -118,7 +132,7 @@ export default function ChatScreen() {
           user: {
             _id: message.sender?._id || message.sender,
             name: message.sender?.name || 'User',
-            avatar: message.sender?.profilePicture || '',
+            avatar: normalizeAvatar(message.sender?.profilePicture || ''),
           },
           sent: true,
           received: message.read,
@@ -136,10 +150,20 @@ export default function ChatScreen() {
       }
     };
 
-    // Listen for typing indicator (optional, if you add this to backend)
-    const handleTyping = ({ userId, isTyping: typing }) => {
-      if (userId === otherUserId) {
-        setIsTyping(typing);
+    // Listen for typing indicator (backend may emit different shapes)
+    const handleTyping = (data) => {
+      // data might be { userId, isTyping } or { senderId, isTyping } or { conversationId, isTyping }
+      const typing = data?.isTyping;
+      const senderId = data?.userId || data?.senderId || data?.sender;
+      const convId = data?.conversationId || data?.conversation;
+
+      if (senderId && senderId === otherUserId) {
+        setIsTyping(!!typing);
+      } else if (convId && conversationId && convId === conversationId) {
+        setIsTyping(!!typing);
+      } else if (senderId && conversationId == null && senderId === otherUserId) {
+        // fallback when conversationId not available
+        setIsTyping(!!typing);
       }
     };
 
@@ -189,7 +213,7 @@ export default function ChatScreen() {
           user: {
             _id: user._id,
             name: user.name,
-            avatar: user.profilePicture,
+            avatar: normalizeAvatar(user.profilePicture || ''),
           },
           sent: true,
           received: false,
@@ -354,10 +378,16 @@ export default function ChatScreen() {
 
   // Handle typing indicator
   const handleInputTextChanged = useCallback((text) => {
-    if (conversationId) {
-      WebSocketService.emitTyping(conversationId, text.length > 0);
+    const isTyping = text.length > 0;
+    try {
+      // Emit structured typing payload; backend listeners are tolerant to different shapes
+      WebSocketService.emitTyping({ conversationId, senderId: user?._id, receiverId: otherUserId, isTyping });
+      // Also emit legacy shape for servers listening for (conversationId, boolean)
+      WebSocketService.emitTyping(conversationId, isTyping);
+    } catch (err) {
+      console.warn('emitTyping failed', err);
     }
-  }, [conversationId]);
+  }, [conversationId, otherUserId, user]);
 
   // Render message bubble
   const renderBubble = (props) => {
@@ -480,7 +510,9 @@ export default function ChatScreen() {
               <Ionicons name="chevron-back" size={24} color={COLORS.primary} />
               <Image
                 source={{ 
-                  uri: otherUserAvatar || 'https://api.dicebear.com/7.x/avataaars/png?seed=default' 
+                  uri: (otherUserAvatar && otherUserAvatar.startsWith('http'))
+                    ? otherUserAvatar
+                    : (otherUserAvatar ? `https://rentify-server-ge0f.onrender.com${otherUserAvatar}` : 'https://api.dicebear.com/7.x/avataaars/png?seed=default')
                 }}
                 style={styles.headerAvatar}
               />
@@ -518,7 +550,7 @@ export default function ChatScreen() {
           user={{
             _id: user._id,
             name: user.name || user.username,
-            avatar: user.profilePicture,
+            avatar: normalizeAvatar(user.profilePicture || ''),
           }}
           renderBubble={renderBubble}
           renderInputToolbar={renderInputToolbar}

@@ -12,12 +12,14 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, Stack } from 'expo-router';
 import { useAuthStore } from '../store/authStore';
+import normalizeAvatar from './utils/normalizeAvatar';
 import ApiService from '../services/apiService';
 import COLORS from '../constant/colors';
 
 export default function ContactsScreen() {
   const router = useRouter();
-  const user = useAuthStore(state => state.user);
+  // Use same pattern as profile tab: destructure store to get user and methods
+  const { user } = useAuthStore();
   const [contacts, setContacts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -60,44 +62,58 @@ export default function ContactsScreen() {
   };
 
   const openChat = (contact) => {
+    // Normalize avatar using helper
+    let avatar = normalizeAvatar(contact?.profilePicture || 'https://example.com/default-profile.png');
+
     router.push({
       pathname: '/ChatScreen',
       params: {
         otherUserId: contact._id,
         otherUserName: contact.fullName || contact.name || contact.username,
-        otherUserAvatar: contact.profilePicture || '',
+        otherUserAvatar: avatar,
       }
     });
   };
 
   const renderContactItem = ({ item }) => (
-    <TouchableOpacity
-      style={styles.contactItem}
-      onPress={() => openChat(item)}
-      activeOpacity={0.7}
-    >
-      <View style={styles.avatarContainer}>
-        {item.profilePicture ? (
-          <Image
-            source={{ uri: item.profilePicture }}
-            style={styles.avatar}
-          />
-        ) : (
-          <View style={[styles.avatar, styles.avatarPlaceholder]}>
-            <Ionicons name="person" size={24} color="#fff" />
+    (() => {
+      // Normalize avatar URI: handle absolute URLs, relative server paths, and DiceBear svg -> png
+      let avatarUri = null;
+
+      if (item.profilePicture) {
+        avatarUri = normalizeAvatar(item.profilePicture || '');
+      }
+
+      return (
+        <TouchableOpacity
+          style={styles.contactItem}
+          onPress={() => openChat(item)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.avatarContainer}>
+            {avatarUri ? (
+              <Image
+                source={{ uri: avatarUri }}
+                style={styles.avatar}
+              />
+            ) : (
+              <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                <Ionicons name="person" size={24} color="#fff" />
+              </View>
+            )}
           </View>
-        )}
-      </View>
-      
-      <View style={styles.contactInfo}>
-        <Text style={styles.contactName}>
-          {item.fullName || item.name || item.username}
-        </Text>
-        <Text style={styles.contactEmail}>{item.email}</Text>
-      </View>
-      
-      <Ionicons name="chatbubble-outline" size={24} color={COLORS.primary} />
-    </TouchableOpacity>
+          
+          <View style={styles.contactInfo}>
+            <Text style={styles.contactName}>
+              {item.fullName || item.name || item.username}
+            </Text>
+            <Text style={styles.contactEmail}>{item.email}</Text>
+          </View>
+          
+          <Ionicons name="chatbubble-outline" size={24} color={COLORS.primary} />
+        </TouchableOpacity>
+      );
+    })()
   );
 
   if (!user) {

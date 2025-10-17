@@ -206,9 +206,38 @@ class WebSocketService {
   }
 
   // Emit typing status
-  emitTyping(conversationId, isTyping) {
-    if (this.socket?.connected) {
-      this.socket.emit('typing', { conversationId, isTyping });
+  emitTyping(conversationIdOrPayload, isTyping) {
+    if (!this.socket?.connected) return;
+
+    // Accept either (conversationId, isTyping) or ({ conversationId, senderId, receiverId, isTyping })
+    let payload = {};
+    if (typeof conversationIdOrPayload === 'object') {
+      payload = conversationIdOrPayload || {};
+    } else {
+      payload.conversationId = conversationIdOrPayload;
+      payload.isTyping = isTyping;
+    }
+
+    // Normalize boolean
+    payload.isTyping = !!payload.isTyping;
+
+    try {
+      // Emit conversation-shaped typing event
+      const convPayload = { conversationId: payload.conversationId, isTyping: payload.isTyping };
+      this.socket.emit('typing', convPayload);
+
+      // Emit user-shaped typing event for backends expecting sender/receiver
+      const userPayload = {
+        senderId: payload.senderId || payload.sender || undefined,
+        receiverId: payload.receiverId || payload.receiver || undefined,
+        isTyping: payload.isTyping,
+      };
+      this.socket.emit('typing', userPayload);
+
+      // Also emit a simple tuple-style event for older listeners (backward compatibility)
+      this.socket.emit('typing-status', { conversationId: payload.conversationId, isTyping: payload.isTyping });
+    } catch (err) {
+      console.warn('emitTyping error', err);
     }
   }
 

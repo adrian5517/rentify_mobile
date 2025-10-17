@@ -17,10 +17,12 @@ import { useAuthStore } from '../../store/authStore';
 import ApiService from '../../services/apiService';
 import WebSocketService from '../../services/websocketService';
 import COLORS from '../../constant/colors';
+import normalizeAvatar from '../utils/normalizeAvatar';
 
 export default function MessageScreen() {
   const router = useRouter();
-  const user = useAuthStore(state => state.user);
+  // Use same destructuring as profile tab for consistency
+  const { user } = useAuthStore();
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -142,12 +144,9 @@ export default function MessageScreen() {
       ? formatTime(new Date(item.lastMessage.createdAt)) 
       : '';
 
-    // Get profile picture with fallback
-    const avatarUri = otherUser?.profilePicture 
-      ? (otherUser.profilePicture.startsWith('http') 
-          ? otherUser.profilePicture 
-          : `https://rentify-server-ge0f.onrender.com${otherUser.profilePicture}`)
-      : 'https://api.dicebear.com/7.x/avataaars/png?seed=default';
+    // Get profile picture with fallback and normalize (DiceBear svg -> png, relative paths)
+  // Normalize avatar using helper
+  let avatarUri = normalizeAvatar(otherUser?.profilePicture || '') || 'https://api.dicebear.com/7.x/avataaars/png?seed=default';
 
     return (
       <TouchableOpacity

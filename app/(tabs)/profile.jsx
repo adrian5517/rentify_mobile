@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuthStore } from '@/store/authStore';
+import normalizeAvatar from '../utils/normalizeAvatar';
 import { useRouter } from 'expo-router';
 import COLORS from '@/constant/colors';
 import { Ionicons, MaterialIcons, AntDesign } from '@expo/vector-icons';
@@ -18,10 +19,7 @@ export default function Profile() {
   const { logout, user } = useAuthStore();
   const router = useRouter();
   // Ensure Dicebear SVG URLs are converted to PNG for React Native compatibility
-let profilePicture = user?.profilePicture || 'https://example.com/default-profile.png';
-if (profilePicture.includes('api.dicebear.com') && profilePicture.includes('/svg?')) {
-  profilePicture = profilePicture.replace('/svg?', '/png?');
-}
+let profilePicture = normalizeAvatar(user?.profilePicture || 'https://example.com/default-profile.png');
 
   const handleLogout = async () => {
     Alert.alert(
