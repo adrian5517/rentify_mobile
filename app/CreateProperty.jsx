@@ -150,17 +150,42 @@ export default function CreateProperty() {
       const amenitiesArray = amenities.split(',').map(item => item.trim());
       amenitiesArray.forEach(a => formData.append('amenities', a));
 
-      images.forEach((uri, index) => {
-        const filename = uri.split('/').pop();
-        const match = /\.(\w+)$/.exec(filename);
-        const ext = match ? match[1] : 'jpg';
+      // Process images - convert to blob for web compatibility
+      for (let index = 0; index < images.length; index++) {
+        const uri = images[index];
+        
+        if (Platform.OS === 'web') {
+          // For web platform, convert URI to blob
+          try {
+            const response = await fetch(uri);
+            const blob = await response.blob();
+            const filename = uri.split('/').pop() || `image_${index}.jpg`;
+            const match = /\.(\w+)$/.exec(filename);
+            const ext = match ? match[1] : 'jpg';
+            
+            formData.append('images', blob, `image_${index}.${ext}`);
+          } catch (error) {
+            console.error('Error converting image to blob:', error);
+            // Fallback to direct URI
+            formData.append('images', {
+              uri,
+              name: `image_${index}.jpg`,
+              type: 'image/jpeg',
+            });
+          }
+        } else {
+          // For native mobile platforms
+          const filename = uri.split('/').pop();
+          const match = /\.(\w+)$/.exec(filename);
+          const ext = match ? match[1] : 'jpg';
 
-        formData.append('images', {
-          uri,
-          name: `image_${index}.${ext}`,
-          type: `image/${ext}`,
-        });
-      });
+          formData.append('images', {
+            uri,
+            name: `image_${index}.${ext}`,
+            type: `image/${ext}`,
+          });
+        }
+      }
 
       const response = await fetch('https://rentify-server-ge0f.onrender.com/api/properties', {
         method: 'POST',

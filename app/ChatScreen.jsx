@@ -9,9 +9,9 @@ import {
   TouchableOpacity,
   Image,
   Keyboard,
-  SafeAreaView,
+  KeyboardAvoidingView,
 } from 'react-native';
-import { GiftedChat, Bubble, InputToolbar, Send, Actions } from 'react-native-gifted-chat';
+import { GiftedChat, Bubble, InputToolbar, Send, Actions, Composer } from 'react-native-gifted-chat';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -20,9 +20,11 @@ import WebSocketService from '../services/websocketService';
 import { useAuthStore } from '../store/authStore';
 import normalizeAvatar from './utils/normalizeAvatar';
 import COLORS from '../constant/colors';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function ChatScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   // Use same destructuring as profile tab for consistency
   const { user } = useAuthStore();
   const params = useLocalSearchParams();
@@ -243,7 +245,7 @@ export default function ChatScreen() {
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ImagePicker.MediaType.Images,
         allowsMultipleSelection: false,
         quality: 0.7,
       });
@@ -271,7 +273,7 @@ export default function ChatScreen() {
       }
 
       const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ImagePicker.MediaType.Images,
         quality: 0.7,
       });
 
@@ -316,9 +318,19 @@ export default function ChatScreen() {
         },
       });
 
-      const data = await response.json();
+      // Try to parse JSON response; if server returned HTML (error page), handle gracefully
+      let data = null;
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        const text = await response.text();
+        console.warn('sendImageMessage: non-JSON response:', text.substring(0, 300));
+        // Provide the raw text in the alert so user/developer can see server output
+        Alert.alert('Error', `Failed to send image: ${text.substring(0, 200)}`);
+      }
 
-      if (response.ok) {
+      if (response.ok && data) {
         // Add to messages
         const formattedMessage = {
           _id: data._id || Date.now().toString(),
@@ -345,8 +357,10 @@ export default function ChatScreen() {
           text: '',
           images: data.imageUrls || [],
         });
-      } else {
-        Alert.alert('Error', 'Failed to send image');
+      } else if (!response.ok) {
+        // If server responded non-OK but with JSON, show message
+        const message = data?.message || data?.error || 'Failed to send image';
+        Alert.alert('Error', message);
       }
     } catch (error) {
       console.error('Error sending image:', error);
@@ -436,13 +450,44 @@ export default function ChatScreen() {
     );
   };
 
+  // Render composer with explicit styling for visibility
+  const renderComposer = (props) => {
+    return (
+      <Composer
+        {...props}
+        textInputStyle={{
+          color: '#000000',
+          backgroundColor: '#ffffff',
+          paddingTop: 8,
+          paddingBottom: 8,
+          paddingHorizontal: 12,
+          fontSize: 16,
+          lineHeight: 22,
+          minHeight: 44,
+        }}
+        textInputProps={{
+          ...props.textInputProps,
+          style: {
+            color: '#000000',
+            fontSize: 16,
+            paddingTop: 8,
+            paddingBottom: 8,
+          }
+        }}
+        placeholder="Type a message..."
+        placeholderTextColor="#999999"
+        multiline={true}
+      />
+    );
+  };
+
   // Render input toolbar
   const renderInputToolbar = (props) => {
     return (
       <InputToolbar
         {...props}
         containerStyle={styles.inputToolbar}
-        primaryStyle={{ alignItems: 'center' }}
+        primaryStyle={styles.inputToolbarPrimary}
       />
     );
   };
@@ -496,7 +541,7 @@ export default function ChatScreen() {
   }
 
   return (
-    <View style={{ flex: 1 }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#f5f5f5' }} edges={['top', 'bottom']}>
       <Stack.Screen
         options={{
           title: '',
@@ -541,65 +586,57 @@ export default function ChatScreen() {
           ),
         }}
       />
-      
-      <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
-        <GiftedChat
-          messages={messages}
-          onSend={messages => onSend(messages)}
-          onInputTextChanged={handleInputTextChanged}
-          user={{
-            _id: user._id,
-            name: user.name || user.username,
-            avatar: normalizeAvatar(user.profilePicture || ''),
-          }}
-          renderBubble={renderBubble}
-          renderInputToolbar={renderInputToolbar}
-          renderSend={renderSend}
-          renderActions={renderActions}
-          alwaysShowSend
-          scrollToBottom
-          isTyping={isTyping}
-          placeholder="Type a message..."
-          showAvatarForEveryMessage={false}
-          showUserAvatar={true}
-          dateFormat="MMM D, YYYY"
-          timeFormat="h:mm A"
-          messagesContainerStyle={styles.messagesContainer}
-          textInputProps={{
-            editable: true,
-            autoCorrect: true,
-            autoCapitalize: 'sentences',
-            multiline: true,
-            numberOfLines: 4,
-            maxLength: 1000,
-            placeholder: "Type a message...",
-            placeholderTextColor: '#999',
-            underlineColorAndroid: 'transparent',
-            returnKeyType: 'default',
-            enablesReturnKeyAutomatically: false,
-            blurOnSubmit: false,
-            style: {
+
+      <GiftedChat
+        messages={messages}
+        onSend={messages => onSend(messages)}
+        onInputTextChanged={handleInputTextChanged}
+        user={{
+          _id: user._id,
+          name: user.name || user.username,
+          avatar: normalizeAvatar(user.profilePicture || ''),
+        }}
+        renderBubble={renderBubble}
+        renderInputToolbar={renderInputToolbar}
+        renderSend={renderSend}
+        renderActions={renderActions}
+        alwaysShowSend
+        scrollToBottom
+        isTyping={isTyping}
+        placeholder="Type a message..."
+        showAvatarForEveryMessage={false}
+        showUserAvatar={true}
+        dateFormat="MMM D, YYYY"
+        timeFormat="h:mm A"
+        messagesContainerStyle={styles.messagesContainer}
+        renderComposer={(props) => (
+          <Composer
+            {...props}
+            textInputStyle={{
+              color: '#000000',
+              backgroundColor: '#ffffff',
               fontSize: 16,
               lineHeight: 20,
-              marginTop: Platform.OS === 'ios' ? 8 : 0,
-              marginBottom: Platform.OS === 'ios' ? 8 : 0,
               paddingTop: 8,
               paddingBottom: 8,
-            },
-          }}
-          minInputToolbarHeight={56}
-          maxInputToolbarHeight={120}
-          minComposerHeight={40}
-          maxComposerHeight={100}
-          bottomOffset={0}
-          keyboardShouldPersistTaps="always"
-          listViewProps={{
-            keyboardDismissMode: 'none',
-            keyboardShouldPersistTaps: 'always',
-          }}
-        />
-      </View>
-    </View>
+              paddingHorizontal: 12,
+              marginHorizontal: 4,
+              borderRadius: 20,
+              borderWidth: 1,
+              borderColor: '#e0e0e0',
+              minHeight: 40,
+            }}
+            placeholder="Type a message..."
+            placeholderTextColor="#999"
+            multiline={true}
+          />
+        )}
+        minInputToolbarHeight={56}
+        minComposerHeight={40}
+        bottomOffset={0}
+        keyboardShouldPersistTaps="handled"
+      />
+    </SafeAreaView>
   );
 }
 
@@ -669,9 +706,14 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#e0e0e0',
     backgroundColor: '#fff',
-    paddingVertical: 6,
+    paddingVertical: 4,
     paddingHorizontal: 4,
     minHeight: 56,
+  },
+  inputToolbarPrimary: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
   },
   sendButton: {
     marginRight: 10,
