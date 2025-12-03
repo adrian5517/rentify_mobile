@@ -18,7 +18,7 @@ import * as ImagePicker from 'expo-image-picker';
 import ApiService from '../services/apiService';
 import WebSocketService from '../services/websocketService';
 import { useAuthStore } from '../store/authStore';
-import normalizeAvatar from './utils/normalizeAvatar';
+import normalizeAvatar from '../utils/normalizeAvatar';
 import COLORS from '../constant/colors';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -33,6 +33,8 @@ export default function ChatScreen() {
   
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [hasEarlier, setHasEarlier] = useState(false);
+  const [loadingEarlier, setLoadingEarlier] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [conversationId, setConversationId] = useState(params.conversationId || null);
   
@@ -54,7 +56,9 @@ export default function ChatScreen() {
   const propertyName = params.propertyName;
 
   // Load messages
-  const loadMessages = useCallback(async () => {
+  const PAGE_SIZE = 50;
+
+  const loadMessages = useCallback(async (opts = {}) => {
     if (!otherUserId) {
       setLoading(false);
       return;
@@ -62,18 +66,18 @@ export default function ChatScreen() {
 
     try {
       console.log('📩 Loading messages with user:', otherUserId);
-      
-      // Use getMessagesBetweenUsers which calls: /messages/:userId1/:otherUserId
-      const response = await ApiService.getMessagesBetweenUsers(otherUserId);
-      
+      // Request recent messages with optional pagination
+      const limit = opts.limit || PAGE_SIZE;
+      const before = opts.before || undefined;
+      const response = await ApiService.getMessagesBetweenUsers(otherUserId, { limit, before });
+
       if (response.success) {
-        // Your backend returns an array of messages directly
         const backendMessages = response.messages || response.data || [];
-        
+
         // Format messages for GiftedChat
         const formattedMessages = backendMessages.map(msg => ({
           _id: msg._id,
-          text: msg.message || '', // Your backend uses 'message' not 'content'
+          text: msg.message || msg.text || '',
           createdAt: new Date(msg.createdAt),
           user: {
             _id: msg.sender?._id || msg.sender,
@@ -82,11 +86,15 @@ export default function ChatScreen() {
           },
           sent: true,
           received: msg.read,
-          // Store images if any
           image: msg.imageUrls && msg.imageUrls.length > 0 ? msg.imageUrls[0] : undefined,
-        })).reverse(); // GiftedChat expects newest first
-        
+        }));
+
+        // GiftedChat expects newest-first. Backend may already be sorted asc/desc.
+        // We'll ensure newest-first by sorting by createdAt descending.
+        formattedMessages.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
         setMessages(formattedMessages);
+        setHasEarlier(backendMessages.length === limit); // If we got a full page, older messages may exist
         console.log('✅ Messages loaded:', formattedMessages.length);
       } else {
         console.error('❌ Failed to load messages:', response.error);
@@ -101,6 +109,53 @@ export default function ChatScreen() {
       setLoading(false);
     }
   }, [otherUserId]);
+
+  // Fetch older messages (load earlier)
+  const loadEarlierMessages = useCallback(async () => {
+    if (!messages || messages.length === 0) return;
+    if (!hasEarlier) return;
+
+    setLoadingEarlier(true);
+    try {
+      const oldest = messages[messages.length - 1];
+      const before = oldest?.createdAt ? new Date(oldest.createdAt).toISOString() : undefined;
+      const response = await ApiService.getMessagesBetweenUsers(otherUserId, { limit: PAGE_SIZE, before });
+
+      if (response.success) {
+        const backendMessages = response.messages || response.data || [];
+        if (backendMessages.length === 0) {
+          setHasEarlier(false);
+          return;
+        }
+
+        const formatted = backendMessages.map(msg => ({
+          _id: msg._id,
+          text: msg.message || msg.text || '',
+          createdAt: new Date(msg.createdAt),
+          user: {
+            _id: msg.sender?._id || msg.sender,
+            name: msg.sender?.name || 'User',
+            avatar: normalizeAvatar(msg.sender?.profilePicture || ''),
+          },
+          sent: true,
+          received: msg.read,
+          image: msg.imageUrls && msg.imageUrls.length > 0 ? msg.imageUrls[0] : undefined,
+        }));
+
+        formatted.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+        // Prepend older messages to existing list
+        setMessages(prev => GiftedChat.append(prev, formatted));
+
+        // If fewer than page size returned, no more older messages
+        if (backendMessages.length < PAGE_SIZE) setHasEarlier(false);
+      }
+    } catch (err) {
+      console.error('Error loading earlier messages:', err);
+    } finally {
+      setLoadingEarlier(false);
+    }
+  }, [messages, otherUserId, hasEarlier]);
 
   // Initialize WebSocket and load messages
   useEffect(() => {
@@ -233,6 +288,13 @@ export default function ChatScreen() {
       Alert.alert('Error', 'Failed to send message');
     }
   }, [user, otherUserId]);
+
+  // Memoize render callbacks to reduce re-renders
+  const memoizedRenderBubble = useCallback((props) => renderBubble(props), []);
+  const memoizedRenderComposer = useCallback((props) => renderComposer(props), []);
+  const memoizedRenderInputToolbar = useCallback((props) => renderInputToolbar(props), []);
+  const memoizedRenderSend = useCallback((props) => renderSend(props), []);
+  const memoizedRenderActions = useCallback((props) => renderActions(props), []);
 
   // Pick image from library
   const pickImage = async () => {
@@ -596,10 +658,10 @@ export default function ChatScreen() {
           name: user.name || user.username,
           avatar: normalizeAvatar(user.profilePicture || ''),
         }}
-        renderBubble={renderBubble}
-        renderInputToolbar={renderInputToolbar}
-        renderSend={renderSend}
-        renderActions={renderActions}
+        renderBubble={memoizedRenderBubble}
+        renderInputToolbar={memoizedRenderInputToolbar}
+        renderSend={memoizedRenderSend}
+        renderActions={memoizedRenderActions}
         alwaysShowSend
         scrollToBottom
         isTyping={isTyping}
@@ -609,6 +671,9 @@ export default function ChatScreen() {
         dateFormat="MMM D, YYYY"
         timeFormat="h:mm A"
         messagesContainerStyle={styles.messagesContainer}
+        loadEarlier={hasEarlier}
+        onLoadEarlier={loadEarlierMessages}
+        isLoadingEarlier={loadingEarlier}
         renderComposer={(props) => (
           <Composer
             {...props}

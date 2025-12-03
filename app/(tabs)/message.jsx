@@ -17,7 +17,7 @@ import { useAuthStore } from '../../store/authStore';
 import ApiService from '../../services/apiService';
 import WebSocketService from '../../services/websocketService';
 import COLORS from '../../constant/colors';
-import normalizeAvatar from '../utils/normalizeAvatar';
+import normalizeAvatar from '../../utils/normalizeAvatar';
 
 export default function MessageScreen() {
   const router = useRouter();
@@ -140,9 +140,34 @@ export default function MessageScreen() {
     // New format: item.otherUser contains the other person's info
     const otherUser = item.otherUser;
     const isUnread = item.unreadCount > 0;
-    const timeString = item.lastMessage?.createdAt 
-      ? formatTime(new Date(item.lastMessage.createdAt)) 
+    const timeString = item.lastMessage?.createdAt
+      ? formatTime(new Date(item.lastMessage.createdAt))
       : '';
+
+    // Defensive: ensure displayed name and last message are strings
+    const otherUserNameSafe = (() => {
+      const nameVal = otherUser?.name || otherUser?.fullName || otherUser?.username;
+      if (!nameVal) return 'Unknown User';
+      return typeof nameVal === 'string' ? nameVal : String(nameVal);
+    })();
+
+    const lastMessageText = (() => {
+      const raw = item.lastMessage?.message || item.lastMessage?.text || item.lastMessage;
+      if (raw == null) return 'No messages yet';
+      if (typeof raw === 'string') return raw;
+      if (typeof raw === 'object') {
+        // Try common fields
+        if (raw.text && typeof raw.text === 'string') return raw.text;
+        if (raw.message && typeof raw.message === 'string') return raw.message;
+        // Fallback to JSON safe string
+        try {
+          return JSON.stringify(raw);
+        } catch (e) {
+          return 'New message';
+        }
+      }
+      return String(raw);
+    })();
 
     // Get profile picture with fallback and normalize (DiceBear svg -> png, relative paths)
   // Normalize avatar using helper
@@ -152,11 +177,19 @@ export default function MessageScreen() {
       <TouchableOpacity
         style={[styles.conversationItem, isUnread && styles.unreadItem]}
         onPress={() => {
+          // Ensure otherUserName is a string to avoid rendering objects
+          const otherUserNameSafe = (() => {
+            const val = otherUser?.name || otherUser?.fullName || otherUser?.username || otherUser;
+            if (!val) return 'User';
+            if (typeof val === 'string') return val;
+            return val.name || val.username || String(val);
+          })();
+
           router.push({
             pathname: '/ChatScreen',
             params: {
               otherUserId: otherUser?._id,
-              otherUserName: otherUser?.name || otherUser?.username,
+              otherUserName: otherUserNameSafe,
               otherUserAvatar: avatarUri,
             },
           });
@@ -169,16 +202,16 @@ export default function MessageScreen() {
         <View style={styles.conversationContent}>
           <View style={styles.conversationHeader}>
             <Text style={[styles.userName, isUnread && styles.unreadText]}>
-              {otherUser?.name || otherUser?.username || 'Unknown User'}
+              {otherUserNameSafe}
             </Text>
             {timeString && <Text style={styles.timeText}>{timeString}</Text>}
           </View>
           <View style={styles.lastMessageRow}>
-            <Text 
-              style={[styles.lastMessage, isUnread && styles.unreadText]} 
+            <Text
+              style={[styles.lastMessage, isUnread && styles.unreadText]}
               numberOfLines={1}
             >
-              {item.lastMessage?.message || 'No messages yet'}
+              {lastMessageText}
             </Text>
             {isUnread && (
               <View style={styles.unreadBadge}>

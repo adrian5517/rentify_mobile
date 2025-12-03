@@ -442,7 +442,11 @@ if (profilePicture.includes('api.dicebear.com') && profilePicture.includes('/svg
                         <View style={styles.onlineBadge} />
                       </View>
                       <View style={styles.hostDetails}>
-                        <Text style={styles.hostName}>{selectedProperty.postedBy || 'Property Owner'}</Text>
+                        <Text style={styles.hostName}>{
+                          typeof selectedProperty.postedBy === 'string'
+                            ? selectedProperty.postedBy
+                            : (selectedProperty.postedBy?.name || selectedProperty.postedBy?.username || 'Property Owner')
+                        }</Text>
                         <Text style={styles.hostTitle}>Verified Host</Text>
                         <View style={styles.hostRating}>
                           <Ionicons name="star" size={14} color="#FFD700" />
@@ -473,7 +477,7 @@ if (profilePicture.includes('api.dicebear.com') && profilePicture.includes('/svg
                     <View style={styles.quickActionsRow}>
                       <TouchableOpacity 
                         style={styles.quickActionCard}
-                        onPress={() => alert(`Calling ${selectedProperty.postedBy || 'owner'}`)}
+                        onPress={() => alert(`Calling ${typeof selectedProperty.postedBy === 'string' ? selectedProperty.postedBy : (selectedProperty.postedBy?.name || selectedProperty.postedBy?.username || 'owner')}`)}
                       >
                         <View style={styles.quickActionIcon}>
                           <Ionicons name="call" size={22} color="#10B981" />
@@ -483,7 +487,7 @@ if (profilePicture.includes('api.dicebear.com') && profilePicture.includes('/svg
                       
                       <TouchableOpacity 
                         style={styles.quickActionCard}
-                        onPress={() => alert(`Messaging ${selectedProperty.postedBy || 'owner'}`)}
+                        onPress={() => alert(`Messaging ${typeof selectedProperty.postedBy === 'string' ? selectedProperty.postedBy : (selectedProperty.postedBy?.name || selectedProperty.postedBy?.username || 'owner')}`)}
                       >
                         <View style={styles.quickActionIcon}>
                           <Ionicons name="chatbubble" size={22} color="#3B82F6" />

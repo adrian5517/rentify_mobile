@@ -719,12 +719,19 @@ export default function Maps() {
         console.log('✅ Message sent successfully:', response.data);
         
         // Navigate to chat screen with the conversation details
+        // Ensure otherUserName is a string (postedBy may be object)
+        const otherUserNameSafe = (() => {
+          const val = selectedProperty.postedBy?.name || selectedProperty.postedBy?.fullName || selectedProperty.postedBy || 'Property Owner';
+          if (typeof val === 'string') return val;
+          return val.name || val.username || String(val) || 'Property Owner';
+        })();
+
         router.push({
           pathname: '/ChatScreen',
           params: {
             conversationId: response.data.conversation,
             otherUserId: ownerId,
-            otherUserName: selectedProperty.postedBy?.name || selectedProperty.postedBy || 'Property Owner',
+            otherUserName: otherUserNameSafe,
             otherUserAvatar: selectedProperty.postedBy?.profilePicture || '',
             propertyId: selectedProperty._id,
             propertyName: selectedProperty.name
@@ -1203,7 +1210,11 @@ export default function Maps() {
                       <View style={styles.onlineIndicator} />
                     </View>
                     <View style={styles.elegantContactInfo}>
-                      <Text style={styles.elegantContactName}>{selectedProperty.postedBy || 'Property Owner'}</Text>
+                      <Text style={styles.elegantContactName}>{
+                        typeof selectedProperty.postedBy === 'string'
+                          ? selectedProperty.postedBy
+                          : (selectedProperty.postedBy?.name || selectedProperty.postedBy?.username || 'Property Owner')
+                      }</Text>
                       <Text style={styles.elegantContactRole}>Owner • Verified</Text>
                       <View style={styles.hostStats}>
                         <View style={styles.hostStat}>
@@ -1309,13 +1320,7 @@ export default function Maps() {
                 )}
               </TouchableOpacity>
               
-              <TouchableOpacity 
-                style={styles.fullScreenSecondaryButton} 
-                onPress={() => alert(`Booking request for ${selectedProperty.name}`)}
-              >
-                <Ionicons name="calendar" size={24} color={COLORS.primary} />
-                <Text style={styles.fullScreenSecondaryButtonText}>Book Visit</Text>
-              </TouchableOpacity>
+              {/* Book Visit button removed per request */}
             </View>
 
             <TouchableOpacity 

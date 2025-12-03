@@ -500,7 +500,7 @@ class RentifyApiService {
    * Get messages between current user and another user
    * Backend endpoint: GET /api/messages/:userId1/:otherUserId
    */
-  async getMessagesBetweenUsers(otherUserId) {
+  async getMessagesBetweenUsers(otherUserId, options = {}) {
     try {
       // Get current user from AsyncStorage (stored during login)
       const userStr = await AsyncStorage.getItem('user');
@@ -510,9 +510,17 @@ class RentifyApiService {
       const user = JSON.parse(userStr);
       const userId = user._id;
 
-      // Call backend endpoint: /messages/:userId1/:otherUserId
-      const response = await this.api.get(`/messages/${userId}/${otherUserId}`);
-      return { success: true, messages: response.data || [], data: response.data };
+      // Build query params for pagination if provided (limit, before)
+      const params = {};
+      if (options.limit) params.limit = options.limit;
+      if (options.before) params.before = options.before; // timestamp or message id
+
+      // Call backend endpoint: /messages/:userId1/:otherUserId with optional params
+      const response = await this.api.get(`/messages/${userId}/${otherUserId}`, { params });
+
+      // Normalize response
+      const messages = response.data || [];
+      return { success: true, messages, data: response.data };
     } catch (error) {
       return { success: false, error: error.message, messages: [] };
     }

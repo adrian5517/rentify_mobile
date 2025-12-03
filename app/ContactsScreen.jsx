@@ -12,7 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, Stack } from 'expo-router';
 import { useAuthStore } from '../store/authStore';
-import normalizeAvatar from './utils/normalizeAvatar';
+import normalizeAvatar from '../utils/normalizeAvatar';
 import ApiService from '../services/apiService';
 import COLORS from '../constant/colors';
 
@@ -65,11 +65,19 @@ export default function ContactsScreen() {
     // Normalize avatar using helper
     let avatar = normalizeAvatar(contact?.profilePicture || 'https://example.com/default-profile.png');
 
+    // Ensure otherUserName is always a string (API may pass object in some fields)
+    const otherUserNameSafe = (() => {
+      const val = contact?.fullName || contact?.name || contact?.username || contact;
+      if (!val) return 'User';
+      if (typeof val === 'string') return val;
+      return val.name || val.username || String(val);
+    })();
+
     router.push({
       pathname: '/ChatScreen',
       params: {
         otherUserId: contact._id,
-        otherUserName: contact.fullName || contact.name || contact.username,
+        otherUserName: otherUserNameSafe,
         otherUserAvatar: avatar,
       }
     });

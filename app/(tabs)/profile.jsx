@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuthStore } from '@/store/authStore';
-import normalizeAvatar from '../utils/normalizeAvatar';
+import normalizeAvatar from '../../utils/normalizeAvatar';
 import { useRouter } from 'expo-router';
 import COLORS from '@/constant/colors';
 import { Ionicons, MaterialIcons, AntDesign } from '@expo/vector-icons';
