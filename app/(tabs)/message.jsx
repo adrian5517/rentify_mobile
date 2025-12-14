@@ -162,7 +162,7 @@ export default function MessageScreen() {
         // Fallback to JSON safe string
         try {
           return JSON.stringify(raw);
-        } catch (e) {
+        } catch {
           return 'New message';
         }
       }
@@ -263,8 +263,9 @@ export default function MessageScreen() {
             <>
               <Text style={styles.emptyText}>No conversations yet</Text>
               <Text style={styles.emptySubtext}>
-                Start messaging property owners to see your conversations here.{'\n\n'}
-                Tap on a property in the Maps tab and click "Contact Owner" to start chatting!
+                {`Start messaging property owners to see your conversations here.
+
+Tap on a property in the Maps tab and click "Contact Owner" to start chatting!`}
               </Text>
             </>
           )}

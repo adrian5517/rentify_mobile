@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { StyleSheet, View, Alert, Text, TouchableOpacity, Image, ScrollView, Animated, Dimensions, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Alert, Text, TouchableOpacity, Image, ScrollView, Animated, ActivityIndicator } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
 import MapboxDirections from '@mapbox/mapbox-sdk/services/directions';
@@ -13,7 +13,7 @@ import { useAuthStore } from '../../store/authStore';
 // Use require for consistent asset loading
 
 const Person = require('../../assets/images/personView.png');
-const House = require('../../assets/images/houseView.png');
+// const House = require('../../assets/images/houseView.png');
 
 const MAPBOX_TOKEN = 'pk.eyJ1IjoiYWRyaWFuNTUxNyIsImEiOiJjbWVoYjVrYzIwNTI3MmpzYzIyYzhpbTlxIn0.33wMUowKG_-xY-qe08KAYQ';
 const directionsClient = MapboxDirections({ accessToken: MAPBOX_TOKEN });
@@ -51,19 +51,21 @@ export default function Maps() {
   const [loadingML, setLoadingML] = useState(false);
   const [contactingOwner, setContactingOwner] = useState(false);
   const mapRef = useRef(null);
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [, setIsExpanded] = useState(false);
   const expandAnim = useRef(new Animated.Value(0)).current;
-  const [showFilters, setShowFilters] = useState(false);
+  // filters UI not implemented yet
+  // const [showFilters, setShowFilters] = useState(false);
   const [navigationMode, setNavigationMode] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [routeSteps, setRouteSteps] = useState([]);
   const slideAnim = useRef(new Animated.Value(0)).current;
-  const [showContactModal, setShowContactModal] = useState(false);
-  const [showBookingModal, setShowBookingModal] = useState(false);
-  const [showActionsPanel, setShowActionsPanel] = useState(true);
-  const contactAnim = useRef(new Animated.Value(0)).current;
-  const bookingAnim = useRef(new Animated.Value(0)).current;
-  const actionsAnim = useRef(new Animated.Value(1)).current;
+  // contact / booking / actions UI not active yet — keep setters when needed
+  // const [showContactModal, setShowContactModal] = useState(false);
+  // const [showBookingModal, setShowBookingModal] = useState(false);
+  // const [showActionsPanel, setShowActionsPanel] = useState(true);
+  // const contactAnim = useRef(new Animated.Value(0)).current;
+  // const bookingAnim = useRef(new Animated.Value(0)).current;
+  // const actionsAnim = useRef(new Animated.Value(1)).current;
   const [realDistance, setRealDistance] = useState(null);
   const [showHostContact, setShowHostContact] = useState(false);
   const hostContactAnim = useRef(new Animated.Value(0)).current;
@@ -534,15 +536,7 @@ export default function Maps() {
   // console.log('mlProperties:', mlProperties);
   // console.log('filteredProperties:', filteredProperties);
 
-  const toggleExpand = () => {
-    setIsExpanded(!isExpanded);
-    Animated.spring(expandAnim, {
-      toValue: isExpanded ? 0 : 1,
-      useNativeDriver: true,
-      tension: 50,
-      friction: 7
-    }).start();
-  };
+  // toggleExpand removed (not used) to silence lint warnings
 
   // Function to get turn-by-turn directions
   const getTurnByTurnDirections = async (start, end) => {
@@ -615,38 +609,7 @@ export default function Maps() {
     }
   };
 
-  // Function to toggle contact modal
-  const toggleContactModal = () => {
-    setShowContactModal(!showContactModal);
-    Animated.spring(contactAnim, {
-      toValue: showContactModal ? 0 : 1,
-      useNativeDriver: true,
-      tension: 50,
-      friction: 7
-    }).start();
-  };
-
-  // Function to toggle booking modal
-  const toggleBookingModal = () => {
-    setShowBookingModal(!showBookingModal);
-    Animated.spring(bookingAnim, {
-      toValue: showBookingModal ? 0 : 1,
-      useNativeDriver: true,
-      tension: 50,
-      friction: 7
-    }).start();
-  };
-
-  // Function to toggle actions panel
-  const toggleActionsPanel = () => {
-    setShowActionsPanel(!showActionsPanel);
-    Animated.spring(actionsAnim, {
-      toValue: showActionsPanel ? 0 : 1,
-      useNativeDriver: true,
-      tension: 50,
-      friction: 7
-    }).start();
-  };
+  // contact/booking/actions toggles removed (not used) to silence lint warnings
 
   // Function to toggle host contact section
   const toggleHostContact = () => {
@@ -893,7 +856,7 @@ export default function Maps() {
               </View>
               <Text style={styles.emptyStateTitle}>No Properties Available</Text>
               <Text style={styles.emptyStateMessage}>
-                {!location ? 'Waiting for your location to load nearby properties...' : 'We couldn\'t find any properties. Please check your connection and try again.'}
+                {!location ? 'Waiting for your location to load nearby properties...' : ("We couldn't find any properties. Please check your connection and try again.")}
               </Text>
               <TouchableOpacity 
                 style={styles.modernRetryButton}
@@ -914,7 +877,7 @@ export default function Maps() {
               </View>
               <Text style={styles.emptyStateTitle}>No {staticLabels[selectedCluster]} Properties</Text>
               <Text style={styles.emptyStateMessage}>
-                We couldn't find any properties in the {staticLabels[selectedCluster].toLowerCase()} category. Try exploring other price ranges.
+                {`We couldn't find any properties in the ${staticLabels[selectedCluster].toLowerCase()} category. Try exploring other price ranges.`}
               </Text>
               <View style={styles.emptyStateActions}>
                 <TouchableOpacity 
@@ -1211,10 +1174,10 @@ export default function Maps() {
                     </View>
                     <View style={styles.elegantContactInfo}>
                       <Text style={styles.elegantContactName}>{
-                        typeof selectedProperty.postedBy === 'string'
-                          ? selectedProperty.postedBy
-                          : (selectedProperty.postedBy?.name || selectedProperty.postedBy?.username || 'Property Owner')
-                      }</Text>
+                            typeof selectedProperty.postedBy === 'string'
+                              ? selectedProperty.postedBy
+                              : (selectedProperty.postedBy?.name || selectedProperty.postedBy?.username || 'Property Owner')
+                          }</Text>
                       <Text style={styles.elegantContactRole}>Owner • Verified</Text>
                       <View style={styles.hostStats}>
                         <View style={styles.hostStat}>
@@ -1233,7 +1196,7 @@ export default function Maps() {
                     </TouchableOpacity>
                   </View>
                   <Text style={styles.hostDescription}>
-                    "Hi! I'm the owner of this property. Feel free to contact me for viewings or any questions."
+                    {"Hi! I'm the owner of this property. Feel free to contact me for viewings or any questions."}
                   </Text>
                 </Animated.View>
               )}
@@ -1543,7 +1506,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0,0,0,0.1)',
   },
-  headerTitle: {
+  headerTitleLegacy: {
     fontSize: 20,
     fontWeight: 'bold',
     color: COLORS.primary,
@@ -1594,9 +1557,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     zIndex: 99,
-  },
-  loadingIcon: {
-    marginRight: 10,
   },
   loadingText: {
     color: COLORS.primary,
@@ -2068,7 +2028,6 @@ const styles = StyleSheet.create({
   },
   elegantContactAvatar: {
     position: 'relative',
-    backgroundColor: 'linear-gradient(135deg, #8B5CF6, #A855F7)',
     backgroundColor: '#8B5CF6',
     width: 56,
     height: 56,

@@ -1,7 +1,21 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, Image, TextInput,
-  TouchableOpacity, Modal, StatusBar, Dimensions, Alert, Pressable
+  View,
+  Text,
+  ScrollView,
+  StyleSheet,
+  Image,
+  TextInput,
+  TouchableOpacity,
+  Modal,
+  StatusBar,
+  Dimensions,
+  Alert,
+  Pressable,
+  FlatList,
+  PanResponder,
+  Animated,
+  ActivityIndicator,
 } from 'react-native';
 import { useAuthStore } from '../../store/authStore';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,12 +26,11 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { FlatList, PanResponder, Animated } from 'react-native';
-import { ActivityIndicator } from 'react-native';
+
 import propertyService from '../../services/propertyService';
 import normalizeAvatar from '../../utils/normalizeAvatar';
 import { API_URL as BASE_API_URL } from '../../constant/api';
-import mlCache from '../../services/mlCache';
+import * as mlCache from '../../services/mlCache';
 
 export default function Home() {
   // For slide down to close
@@ -61,7 +74,7 @@ let profilePicture = user?.profilePicture || 'https://example.com/default-profil
 if (profilePicture.includes('api.dicebear.com') && profilePicture.includes('/svg?')) {
   profilePicture = profilePicture.replace('/svg?', '/png?');
 }
-  const username = user?.username || 'Guest';
+  // username intentionally unused in this view (profile image used instead)
   const [searchQuery, setSearchQuery] = useState('');
   const [properties, setProperties] = useState([]);
   const [filteredProperties, setFilteredProperties] = useState([]);
@@ -70,17 +83,17 @@ if (profilePicture.includes('api.dicebear.com') && profilePicture.includes('/svg
   const [modalVisible, setModalVisible] = useState(false);
   const [mlRecommended, setMlRecommended] = useState([]);
   const [showML, setShowML] = useState(false);
-  const [selectedPropertyRecs, setSelectedPropertyRecs] = useState([]);
-  const [selectedPropertyRecsLoading, setSelectedPropertyRecsLoading] = useState(false);
-  const [selectedPropertyRecsError, setSelectedPropertyRecsError] = useState(null);
-  const [selectedPropertyShowedOnce, setSelectedPropertyShowedOnce] = useState(false);
+  const [, setSelectedPropertyRecs] = useState([]);
+  const [, setSelectedPropertyRecsLoading] = useState(false);
+  const [, setSelectedPropertyRecsError] = useState(null);
+  const [, setSelectedPropertyShowedOnce] = useState(false);
   const [viewMode, setViewMode] = useState('All'); // 'All' | 'Nearby' | 'Deals'
   const [nearbyProperties, setNearbyProperties] = useState([]);
   const [dealsProperties, setDealsProperties] = useState([]);
   const LOC_PERM_KEY = '@rentify:location_permission';
   const [minPrice, setMinPrice] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [, setCurrentImageIndex] = useState(0);
   const navigation = useNavigation();
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -152,44 +165,7 @@ if (profilePicture.includes('api.dicebear.com') && profilePicture.includes('/svg
     }
   };
 
-  const fetchMLRecommendations = async () => {
-    setLoadingML(true);
-    let { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== 'granted') {
-      setLoadingML(false);
-      return alert('Permission denied');
-    }
-    let location = await Location.getCurrentPositionAsync({});
-    
-    let price = minPrice ? parseInt(minPrice) : (maxPrice ? parseInt(maxPrice) : 1000);
-    const res = await fetch('https://ml-rentify.onrender.com/ml', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode: algo, price, ...location.coords }),
-    });
-    const data = await res.json();
-    if (Array.isArray(data)) {
-      // Ensure we have the complete property data with images
-      const mlWithFullData = data.map(mlItem => {
-        const fullProperty = properties.find(p => p._id === mlItem._id);
-        if (fullProperty) {
-          return {
-            ...fullProperty,
-            images: fullProperty.images || [],
-            location: fullProperty.location || mlItem.location
-          };
-        }
-        return {
-          ...mlItem,
-          images: mlItem.images || [],
-          location: mlItem.location || {}
-        };
-      });
-      setMlRecommended(mlWithFullData);
-      setShowML(true);
-    }
-    setLoadingML(false);
-  };
+  // fetchMLRecommendations removed: replaced by handleHomeSuggest / ML-first flow
   // Helper: Haversine distance in km
   const haversineDistance = (lat1, lon1, lat2, lon2) => {
     const toRad = (v) => v * Math.PI / 180;
@@ -323,7 +299,7 @@ if (profilePicture.includes('api.dicebear.com') && profilePicture.includes('/svg
                 if (val.$oid) return String(val.$oid);
                 if (val.id) return extractId(val.id);
                 // fallback to JSON short representation
-                try { return String(val); } catch (e) { return JSON.stringify(val); }
+                try { return String(val); } catch { return JSON.stringify(val); }
               }
               return String(val);
             };
@@ -1239,7 +1215,7 @@ if (profilePicture.includes('api.dicebear.com') && profilePicture.includes('/svg
             console.log('DEV floating debug button pressed');
             setPanEnabled(prev => {
               const next = !prev;
-              try { Alert.alert('DEV', `PanHandlers ${next ? 'ENABLED' : 'DISABLED'}`); } catch (e) {}
+              try { Alert.alert('DEV', `PanHandlers ${next ? 'ENABLED' : 'DISABLED'}`); } catch {}
               console.log('panEnabled now', next);
               return next;
             });
@@ -1431,34 +1407,7 @@ const styles = StyleSheet.create({
   searchContainer: { flexDirection: 'row', margin: 10 },
   searchInput: { backgroundColor: '#fff', flex: 1, borderRadius: 8, padding: 10, margin: 5 },
   searchButton: { backgroundColor: COLORS.primary, padding: 10, borderRadius: 8, justifyContent: 'center' },
-  categoryWrapper: {
-    marginVertical: 10,
-    paddingHorizontal: 10,
-  },
-  categoryButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    marginHorizontal: 6,
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    borderWidth: 1,
-    zIndex: 1,
-    padding:20,
-    
-    borderColor: COLORS.primary,
-  },
-  categoryButtonActive: {
-    backgroundColor: COLORS.primary,
-  },
-  categoryText: {
-    fontSize: 14,
-    color: COLORS.primary,
-    paddingHorizontal: 10,
-  },
-  categoryTextActive: {
-    fontWeight: 'bold',
-    color: COLORS.white,
-  },
+  /* category styles consolidated later in the file */
   filteredDataContainer: { paddingHorizontal: 10 },
   // --- PROPERTY GRID ---
   gridContainer: {
@@ -2232,8 +2181,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#444',
   },
-  closeButton: { alignSelf: 'flex-end', padding: 10 },
-  modalImage: { width: Dimensions.get('window').width, height: 200 },
 
   modalActions: {
     flexDirection: 'row',

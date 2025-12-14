@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, Image, TextInput,
-  TouchableOpacity, FlatList, StatusBar,
-  Platform, Dimensions, Animated
+  TouchableOpacity, FlatList, StatusBar, Animated
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import COLORS from '../../constant/colors';
 import Fuse from 'fuse.js';

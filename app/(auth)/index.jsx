@@ -101,8 +101,8 @@ export default function Login() {
           
           <Text style={styles.successTitle}>Login Successful!</Text>
           <Text style={styles.successMessage}>
-            Welcome back to Rentify!{'\n'}
-            You're now logged in and ready to explore.
+            {`Welcome back to Rentify!
+You're now logged in and ready to explore.`}
           </Text>
 
           <TouchableOpacity 
@@ -221,7 +221,7 @@ export default function Login() {
 
             {/* Footer */}
             <View style={styles.footer}>
-              <Text style={styles.footerText}>Don't have an account?</Text>
+              <Text style={styles.footerText}>{`Don't have an account?`}</Text>
               <Link href="/signup" asChild>
                 <TouchableOpacity>
                   <Text style={styles.link}>Signup</Text>

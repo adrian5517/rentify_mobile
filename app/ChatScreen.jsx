@@ -492,7 +492,7 @@ export default function ChatScreen() {
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaType.Images,
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsMultipleSelection: false,
         quality: 0.7,
       });
@@ -520,7 +520,7 @@ export default function ChatScreen() {
       }
 
       const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaType.Images,
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 0.7,
       });
 
@@ -701,6 +701,7 @@ export default function ChatScreen() {
           },
         }}
       />
+
     );
   };
 
@@ -800,43 +801,46 @@ export default function ChatScreen() {
         options={{
           title: '',
           headerShown: true,
-          headerBackTitle: 'Back',
+          headerStyle: { backgroundColor: '#fff', shadowColor: '#000', shadowOpacity: 0.03, elevation: 0 },
+          headerBackTitleVisible: false,
+          headerTitleAlign: 'center',
           headerLeft: () => (
             <TouchableOpacity
-              style={styles.headerLeftContainer}
-              onPress={() => router.back()}
+              style={styles.headerLeftTouchable}
+              accessibilityLabel="Back"
+              accessibilityHint="Go back to previous screen"
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              onPress={() => {
+                try {
+                  if (typeof router.canGoBack === 'function') {
+                    if (router.canGoBack()) router.back();
+                    else router.replace('/');
+                  } else {
+                    try { router.back(); } catch (_e) { router.replace('/'); }
+                  }
+                } catch (_err) { router.replace('/'); }
+              }}
             >
-              <Ionicons name="chevron-back" size={24} color={COLORS.primary} />
-              <Image
-                source={{ 
-                  uri: (otherUserAvatar && otherUserAvatar.startsWith('http'))
-                    ? otherUserAvatar
-                    : (otherUserAvatar ? `${BASE_API_URL}${otherUserAvatar}` : 'https://api.dicebear.com/7.x/avataaars/png?seed=default')
-                }}
-                style={styles.headerAvatar}
-              />
-              <View style={styles.headerTextContainer}>
-                <Text style={styles.headerName}>{otherUserName}</Text>
-                {propertyName && (
-                  <View style={styles.headerPropertyBadge}>
-                    <Ionicons name="home" size={10} color={COLORS.primary} />
-                    <Text style={styles.headerPropertyText} numberOfLines={1}>
-                      {propertyName}
-                    </Text>
-                  </View>
-                )}
-              </View>
+              <Ionicons name="chevron-back" size={22} color={COLORS.primary} />
             </TouchableOpacity>
           ),
-          headerRight: () => (
-            <View style={styles.headerRightContainer}>
-              <TouchableOpacity style={styles.headerIcon}>
-                <Ionicons name="videocam-outline" size={24} color={COLORS.primary} />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.headerIcon}>
-                <Ionicons name="call-outline" size={24} color={COLORS.primary} />
-              </TouchableOpacity>
+          headerTitle: () => (
+            <View style={styles.headerTitleWrapCenter}>
+              <Text style={styles.headerNameCenter} numberOfLines={1}>{otherUserName}</Text>
+              <Text style={styles.headerStatusCenter} numberOfLines={1}>{params.otherUserStatus || params.otherUserLastSeen || 'Active recently'}</Text>
             </View>
+          ),
+          headerRight: () => (
+            <TouchableOpacity style={styles.headerRightAvatarTouch} onPress={() => { /* optional: open profile */ }}>
+              {otherUserAvatar ? (
+                <Image
+                  source={{ uri: (otherUserAvatar && otherUserAvatar.startsWith('http')) ? otherUserAvatar : (otherUserAvatar ? `${BASE_API_URL}${otherUserAvatar}` : DEFAULT_AVATAR) }}
+                  style={styles.headerRightAvatar}
+                />
+              ) : (
+                <View style={styles.headerRightAvatarPlaceholder}><Text style={styles.headerRightAvatarText}>{(otherUserName || 'U').charAt(0)}</Text></View>
+              )}
+            </TouchableOpacity>
           ),
         }}
       />
@@ -900,6 +904,24 @@ export default function ChatScreen() {
         bottomOffset={0}
         keyboardShouldPersistTaps="handled"
       />
+      {/* Guaranteed floating back button (always rendered on top-left) */}
+      <TouchableOpacity
+        accessibilityLabel="Back"
+        accessibilityHint="Go back to previous screen"
+        onPress={() => {
+          try {
+            if (typeof router.canGoBack === 'function') {
+              if (router.canGoBack()) router.back();
+              else router.replace('/');
+            } else {
+              try { router.back(); } catch (_e) { router.replace('/'); }
+            }
+          } catch (_err) { router.replace('/'); }
+        }}
+        style={[styles.floatingBackButton, { top: (insets?.top ?? 8) + 8 }]}
+      >
+        <Ionicons name="chevron-back" size={20} color={COLORS.primary} />
+      </TouchableOpacity>
     </SafeAreaView>
   );
 }
@@ -1030,5 +1052,17 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     color: COLORS.dark,
     fontSize: 13,
+  },
+  floatingBackButton: {
+    position: 'absolute',
+    left: 8,
+    zIndex: 60,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderRadius: 20,
+    padding: 6,
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 6,
   },
 });

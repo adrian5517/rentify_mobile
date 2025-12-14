@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { 
   View, 
   Text, 
@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuthStore } from '@/store/authStore';
-import normalizeAvatar from '../../utils/normalizeAvatar';
+// normalizeAvatar not used here; resolved profile picture manually
 import { useRouter } from 'expo-router';
 import COLORS from '@/constant/colors';
 import { API_URL as BASE_API_URL } from '@/constant/api';
