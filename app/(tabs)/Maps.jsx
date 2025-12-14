@@ -4,6 +4,26 @@ import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
 import MapboxDirections from '@mapbox/mapbox-sdk/services/directions';
 import { BlurView } from 'expo-blur';
+import { Platform } from 'react-native';
+
+// Fallback wrapper: some Android builds/dev-clients may not render BlurView correctly.
+const MaybeBlur = ({ children, style, intensity = 90, tint = 'light' }) => {
+  try {
+    // On platforms where BlurView works, render it.
+    return (
+      <BlurView intensity={intensity} tint={tint} style={style}>
+        {children}
+      </BlurView>
+    );
+  } catch (err) {
+    // Fallback to plain View (safe on Android emulators/clients)
+    return (
+      <View style={[style, { backgroundColor: tint === 'dark' ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.9)' }]}>
+        {children}
+      </View>
+    );
+  }
+};
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import COLORS from '../../constant/colors';
@@ -759,7 +779,7 @@ export default function Maps() {
   return (
     <View style={styles.container}>
       {/* Modern Glassmorphism Header */}
-      <BlurView intensity={95} tint="extraLight" style={styles.modernHeader}>
+      <MaybeBlur intensity={95} tint="extraLight" style={styles.modernHeader}>
         <View style={styles.headerContent}>
           <View style={styles.headerLeft}>
             <View style={styles.logoContainer}>
@@ -774,7 +794,7 @@ export default function Maps() {
             <Ionicons name="options" size={24} color="#6B7280" />
           </TouchableOpacity>
         </View>
-      </BlurView>
+      </MaybeBlur>
 
       {/* Advanced Cluster Filter Cards */}
       <View style={styles.modernFilterContainer}>
@@ -830,7 +850,7 @@ export default function Maps() {
 
       {/* Advanced Loading Overlay */}
       {loadingML && (
-        <BlurView intensity={90} tint="systemMaterial" style={styles.modernLoadingOverlay}>
+        <MaybeBlur intensity={90} tint="systemMaterial" style={styles.modernLoadingOverlay}>
           <View style={styles.loadingCard}>
             <View style={styles.loadingIconContainer}>
               <Ionicons name="analytics" size={32} color="#8B5CF6" style={styles.loadingIcon} />
@@ -842,7 +862,7 @@ export default function Maps() {
               <View style={styles.progressBar} />
             </View>
           </View>
-        </BlurView>
+        </MaybeBlur>
       )}
 
       {/* Modern Empty States */}
@@ -994,7 +1014,7 @@ export default function Maps() {
           ]}
         >
           {/* Modal Header with Close Button - Glassmorphism */}
-          <BlurView intensity={95} tint="light" style={styles.fullScreenHeader}>
+            <MaybeBlur intensity={95} tint="light" style={styles.fullScreenHeader}>
             <TouchableOpacity 
               style={styles.backButton}
               onPress={() => {
@@ -1010,7 +1030,7 @@ export default function Maps() {
             <TouchableOpacity style={styles.headerFavoriteButton}>
               <Ionicons name="heart-outline" size={24} color="#E91E63" />
             </TouchableOpacity>
-          </BlurView>
+          </MaybeBlur>
           
           {/* Property Image Slider */}
           <View style={styles.imageSliderContainer}>

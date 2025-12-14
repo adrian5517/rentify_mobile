@@ -1,4 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
+// Ensure icon font is loaded early (fixes Android showing fallback shapes)
+if (Ionicons && typeof Ionicons.loadFont === 'function') Ionicons.loadFont();
 import { Tabs } from 'expo-router';
 import React from 'react';
 
