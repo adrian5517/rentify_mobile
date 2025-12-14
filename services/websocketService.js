@@ -1,7 +1,9 @@
 import { io } from 'socket.io-client';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_URL as BASE_API_URL } from '../constant/api';
 
-const SOCKET_URL = 'https://rentify-server-ge0f.onrender.com';
+// Ensure we connect to the server root (not the '/api' namespace)
+const SOCKET_URL = (BASE_API_URL || '').replace(/\/api\/?$/i, '');
 
 class WebSocketService {
   constructor() {

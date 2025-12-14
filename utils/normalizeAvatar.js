@@ -1,22 +1,34 @@
-// normalizeAvatar helper (moved out of `app/` so expo-router doesn't treat it as a route)
-export default function normalizeAvatar(url) {
-  if (!url) return undefined;
+// normalizeAvatar helper — clean single implementation
+import { API_URL as BASE_API_URL } from '../constant/api';
+
+export default function normalizeAvatar(input) {
+  const DEFAULT = 'https://api.dicebear.com/7.x/avataaars/png?seed=default';
+
   try {
-    let avatar = url;
-    if (typeof avatar !== 'string') return undefined;
+    if (input == null) return DEFAULT;
+
+    // Handle object-shaped inputs from backend (e.g. { url, path, secure_url })
+    let avatar = input;
+    if (typeof avatar === 'object') {
+      avatar = avatar.url || avatar.path || avatar.secure_url || avatar.location || avatar.uri || (Array.isArray(avatar) && avatar[0]) || null;
+    }
+
+    if (!avatar) return DEFAULT;
+    if (typeof avatar !== 'string') return DEFAULT;
 
     // Convert DiceBear svg query to PNG for RN Image compatibility
     if (avatar.includes('api.dicebear.com') && avatar.includes('/svg?')) {
       avatar = avatar.replace('/svg?', '/png?');
     }
 
-    // If not absolute URL, prefix with server base
+    // If not absolute URL, prefix with configured API base
     if (!avatar.startsWith('http')) {
-      avatar = `https://rentify-server-ge0f.onrender.com${avatar}`;
+      const base = BASE_API_URL || 'https://rentify-server-ge0f.onrender.com';
+      avatar = `${base}${avatar.startsWith('/') ? avatar : `/${avatar}`}`;
     }
 
     return avatar;
   } catch (err) {
-    return undefined;
+    return DEFAULT;
   }
 }

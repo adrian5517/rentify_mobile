@@ -169,9 +169,9 @@ export default function MessageScreen() {
       return String(raw);
     })();
 
-    // Get profile picture with fallback and normalize (DiceBear svg -> png, relative paths)
-  // Normalize avatar using helper
-  let avatarUri = normalizeAvatar(otherUser?.profilePicture || '') || 'https://api.dicebear.com/7.x/avataaars/png?seed=default';
+    // Resolve avatar input from possible fields and normalize (matches profile logic)
+  const avatarInput = otherUser?.profilePicture || otherUser?.profile_picture || otherUser?.avatar || otherUser?.picture || otherUser;
+  let avatarUri = normalizeAvatar(avatarInput || '') || 'https://api.dicebear.com/7.x/avataaars/png?seed=default';
 
     return (
       <TouchableOpacity

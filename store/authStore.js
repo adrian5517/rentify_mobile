@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { create } from "zustand";
+import normalizeAvatar from '../utils/normalizeAvatar';
 
 // Utility to safely store values
 const safeSetItem = async (key, value) => {
@@ -16,7 +17,14 @@ export const useAuthStore = create((set) => ({
   profilePicture: null,
   isLoading: false,
 
-  setUser: (user) => set({ user }),
+  setUser: (user) => {
+    try {
+      const normalized = user ? { ...user, profilePicture: normalizeAvatar(user.profilePicture || user.profile_picture || user.avatar || user) } : null;
+      set({ user: normalized, profilePicture: normalized?.profilePicture || null });
+    } catch (err) {
+      set({ user, profilePicture: user?.profilePicture || null });
+    }
+  },
 
   register: async (username, email, password) => {
     set({ isLoading: true });
@@ -33,14 +41,15 @@ export const useAuthStore = create((set) => ({
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || "Something went wrong");
 
-      // Save user and token safely
-      await safeSetItem("user", JSON.stringify(data.user));
+      // Normalize profilePicture and save user and token safely
+      const normalizedUser = { ...data.user, profilePicture: normalizeAvatar(data.user.profilePicture || data.user.profile_picture || data.user.avatar || data.user) };
+      await safeSetItem("user", JSON.stringify(normalizedUser));
       await safeSetItem("token", data.token);
-      await safeSetItem("username", data.user.username);
-      await safeSetItem("name", data.user.name);
-      await safeSetItem("profilePicture", data.user.profilePicture);
+      await safeSetItem("username", normalizedUser.username);
+      await safeSetItem("name", normalizedUser.name);
+      await safeSetItem("profilePicture", normalizedUser.profilePicture);
 
-      set({ token: data.token, user: data.user, isLoading: false });
+      set({ token: data.token, user: normalizedUser, profilePicture: normalizedUser.profilePicture, isLoading: false });
       return { success: true };
     } catch (error) {
       set({ isLoading: false });
@@ -63,16 +72,17 @@ export const useAuthStore = create((set) => ({
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || "Something went wrong");
 
-      await safeSetItem("user", JSON.stringify(data.user));
+      const normalizedUser = { ...data.user, profilePicture: normalizeAvatar(data.user.profilePicture || data.user.profile_picture || data.user.avatar || data.user) };
+      await safeSetItem("user", JSON.stringify(normalizedUser));
       await safeSetItem("token", data.token);
-      await safeSetItem("username", data.user.username);
-      await safeSetItem("name", data.user.name);
-      await safeSetItem("profilePicture", data.user.profilePicture);
+      await safeSetItem("username", normalizedUser.username);
+      await safeSetItem("name", normalizedUser.name);
+      await safeSetItem("profilePicture", normalizedUser.profilePicture);
 
       set({
         token: data.token,
-        user: data.user,
-        profilePicture: data.user.profilePicture,
+        user: normalizedUser,
+        profilePicture: normalizedUser.profilePicture,
         isLoading: false,
       });
 

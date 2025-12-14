@@ -13,13 +13,38 @@ import { useAuthStore } from '@/store/authStore';
 import normalizeAvatar from '../../utils/normalizeAvatar';
 import { useRouter } from 'expo-router';
 import COLORS from '@/constant/colors';
+import { API_URL as BASE_API_URL } from '@/constant/api';
 import { Ionicons, MaterialIcons, AntDesign } from '@expo/vector-icons';
 
 export default function Profile() {
   const { logout, user } = useAuthStore();
   const router = useRouter();
-  // Ensure Dicebear SVG URLs are converted to PNG for React Native compatibility
-let profilePicture = normalizeAvatar(user?.profilePicture || 'https://example.com/default-profile.png');
+  // Debug user and defensively resolve profile picture (string or object shapes)
+  console.log('Profile screen user:', user);
+  const DEFAULT_AVATAR = 'https://api.dicebear.com/7.x/avataaars/png?seed=default';
+
+  const resolveProfilePicture = (u) => {
+    if (!u) return DEFAULT_AVATAR;
+    const cand = u.profilePicture || u.profile_picture || u.avatar || u.picture || null;
+    if (!cand) return DEFAULT_AVATAR;
+    if (typeof cand === 'string') {
+      let avatar = cand;
+      if (avatar.includes('api.dicebear.com') && avatar.includes('/svg?')) avatar = avatar.replace('/svg?', '/png?');
+      if (!avatar.startsWith('http')) avatar = `${BASE_API_URL}${avatar.startsWith('/') ? avatar : `/${avatar}`}`;
+      return avatar;
+    }
+    if (typeof cand === 'object') {
+      const objUrl = cand.url || cand.path || cand.secure_url || cand.location || cand.uri || (Array.isArray(cand) && cand[0]) || null;
+      if (!objUrl) return DEFAULT_AVATAR;
+      let avatar = objUrl;
+      if (avatar.includes('api.dicebear.com') && avatar.includes('/svg?')) avatar = avatar.replace('/svg?', '/png?');
+      if (!avatar.startsWith('http')) avatar = `${BASE_API_URL}${avatar.startsWith('/') ? avatar : `/${avatar}`}`;
+      return avatar;
+    }
+    return DEFAULT_AVATAR;
+  };
+
+  const profilePicture = resolveProfilePicture(user);
 
   const handleLogout = async () => {
     Alert.alert(

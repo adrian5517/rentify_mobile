@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "mobile",
-    "slug": "mobile",
+    "slug": "rentifyfinals",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/rentify-img.png",
@@ -15,7 +15,8 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "package": "com.blkgrn.rentifyfinals"
     },
     "web": {
       "bundler": "metro",
@@ -41,8 +42,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "a19b2b9e-f18e-4c84-a9b9-9403b2621826"
+        "projectId": "b0fbd10a-bf8a-411d-8990-094750a33077"
       }
-    }
+    },
+    "owner": "blkgrn"
   }
 }

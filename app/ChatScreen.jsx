@@ -17,10 +17,14 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import ApiService from '../services/apiService';
 import WebSocketService from '../services/websocketService';
+import messageCache from '../services/messageCache';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthStore } from '../store/authStore';
 import normalizeAvatar from '../utils/normalizeAvatar';
 import COLORS from '../constant/colors';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AppState } from 'react-native';
+import { API_URL as BASE_API_URL } from '../constant/api';
 
 export default function ChatScreen() {
   const router = useRouter();
@@ -36,36 +40,125 @@ export default function ChatScreen() {
   const [hasEarlier, setHasEarlier] = useState(false);
   const [loadingEarlier, setLoadingEarlier] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [ttlMinutes, setTtlMinutes] = useState(5);
   const [conversationId, setConversationId] = useState(params.conversationId || null);
+  
+  // User and property details from navigation params
   
   // User and property details from navigation params
   const otherUserId = params.otherUserId;
   const otherUserName = params.otherUserName || 'User';
-  let otherUserAvatar = params.otherUserAvatar;
-
-  // Normalize passed avatar (allow dicebear and relative paths)
-  if (otherUserAvatar) {
-    if (otherUserAvatar.includes('api.dicebear.com') && otherUserAvatar.includes('/svg?')) {
-      otherUserAvatar = otherUserAvatar.replace('/svg?', '/png?');
-    }
-    if (!otherUserAvatar.startsWith('http')) {
-      otherUserAvatar = `https://rentify-server-ge0f.onrender.com${otherUserAvatar}`;
-    }
-  }
+  // Normalize avatar param (accept string or object shapes)
+  let otherUserAvatar = normalizeAvatar(params.otherUserAvatar || params.otherUser?.profilePicture || params.otherUser);
   const propertyId = params.propertyId;
   const propertyName = params.propertyName;
+
+  // Resolve current user's profile picture similarly to profile tab
+  const DEFAULT_AVATAR = 'https://api.dicebear.com/7.x/avataaars/png?seed=default';
+  const resolveProfilePicture = (u) => {
+    if (!u) return DEFAULT_AVATAR;
+    const cand = u.profilePicture || u.profile_picture || u.avatar || u.picture || null;
+    if (!cand) return DEFAULT_AVATAR;
+    if (typeof cand === 'string') {
+      let avatar = cand;
+      if (avatar.includes('api.dicebear.com') && avatar.includes('/svg?')) avatar = avatar.replace('/svg?', '/png?');
+      if (!avatar.startsWith('http')) avatar = `${BASE_API_URL}${avatar.startsWith('/') ? avatar : `/${avatar}`}`;
+      return avatar;
+    }
+    if (typeof cand === 'object') {
+      const objUrl = cand.url || cand.path || cand.secure_url || cand.location || cand.uri || (Array.isArray(cand) && cand[0]) || null;
+      if (!objUrl) return DEFAULT_AVATAR;
+      let avatar = objUrl;
+      if (avatar.includes('api.dicebear.com') && avatar.includes('/svg?')) avatar = avatar.replace('/svg?', '/png?');
+      if (!avatar.startsWith('http')) avatar = `${BASE_API_URL}${avatar.startsWith('/') ? avatar : `/${avatar}`}`;
+      return avatar;
+    }
+    return DEFAULT_AVATAR;
+  };
+
+  // Caching helpers (SQLite via messageCache service)
+  const loadCachedMessages = async (convId) => {
+    try {
+      const convKey = convId || conversationId || otherUserId;
+      const rows = await messageCache.getMessages(convKey, 500);
+      return rows;
+    } catch (err) {
+      console.warn('Failed to load cached messages (sqlite)', err);
+      return [];
+    }
+  };
+
+  const saveMessagesToCache = async (convId, msgs) => {
+    try {
+      const convKey = convId || conversationId || otherUserId;
+      await messageCache.saveMessages(convKey, msgs);
+    } catch (err) {
+      console.warn('Failed to save cached messages (sqlite)', err);
+    }
+  };
+
+  const mergeMessagesDedup = (existing = [], incoming = []) => {
+    const map = new Map();
+    // keep newer message (by createdAt)
+    [...existing, ...incoming].forEach(m => {
+      if (!m || !m._id) return;
+      const prev = map.get(m._id);
+      if (!prev) map.set(m._id, m);
+      else {
+        const prevTime = new Date(prev.createdAt).getTime();
+        const curTime = new Date(m.createdAt).getTime();
+        if (curTime > prevTime) map.set(m._id, m);
+      }
+    });
+    // return sorted newest-first
+    return Array.from(map.values()).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  };
 
   // Load messages
   const PAGE_SIZE = 50;
 
   const loadMessages = useCallback(async (opts = {}) => {
     if (!otherUserId) {
+      // no other user specified
       setLoading(false);
       return;
     }
-
+    // Show cached messages immediately (if any)
     try {
+      const convKey = conversationId || otherUserId;
+      const cached = await loadCachedMessages(convKey);
+      if (cached && cached.length > 0) {
+        // Normalize avatars in cached messages so they match profile resolver
+        const normalizedCached = cached.map(m => {
+          try {
+            const uid = m?.user?._id;
+            if (uid && user && uid === user._id) {
+              // ensure our own messages use the profile resolver
+              return { ...m, user: { ...m.user, avatar: resolveProfilePicture(user) } };
+            }
+            // for other users, re-normalize via helper to pick up base URL changes
+            const avatarInput = m?.user?.avatar || m?.user?.profilePicture || m?.user;
+            return { ...m, user: { ...m.user, avatar: normalizeAvatar(avatarInput) } };
+          } catch (err) {
+            return m;
+          }
+        });
+
+        setMessages(normalizedCached);
+        console.log('📦 Loaded messages from cache:', normalizedCached.length);
+      }
+
+      // Determine TTL (user-configurable via AsyncStorage) and check staleness
+      const TTL_MINUTES = opts.ttlMinutes ?? ttlMinutes ?? 5;
+      const stale = await messageCache.isCacheStale(convKey, TTL_MINUTES);
+      if (!stale) {
+        console.log(`📩 Skipping network fetch for ${convKey} — cache fresh (<${TTL_MINUTES}min)`);
+        setLoading(false);
+        return;
+      }
       console.log('📩 Loading messages with user:', otherUserId);
+      setIsRefreshing(true);
       // Request recent messages with optional pagination
       const limit = opts.limit || PAGE_SIZE;
       const before = opts.before || undefined;
@@ -93,7 +186,10 @@ export default function ChatScreen() {
         // We'll ensure newest-first by sorting by createdAt descending.
         formattedMessages.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-        setMessages(formattedMessages);
+        // Merge with cached messages, deduplicate, and persist
+        const merged = mergeMessagesDedup(cached, formattedMessages);
+        setMessages(merged);
+        await saveMessagesToCache(conversationId || otherUserId, merged);
         setHasEarlier(backendMessages.length === limit); // If we got a full page, older messages may exist
         console.log('✅ Messages loaded:', formattedMessages.length);
       } else {
@@ -107,6 +203,7 @@ export default function ChatScreen() {
       Alert.alert('Error', 'Failed to load messages');
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
   }, [otherUserId]);
 
@@ -144,8 +241,12 @@ export default function ChatScreen() {
 
         formatted.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-        // Prepend older messages to existing list
-        setMessages(prev => GiftedChat.append(prev, formatted));
+        // Prepend older messages to existing list, then persist
+        setMessages(prev => {
+          const merged = mergeMessagesDedup(prev || [], formatted);
+          saveMessagesToCache(conversationId || otherUserId, merged);
+          return GiftedChat.append(prev, formatted);
+        });
 
         // If fewer than page size returned, no more older messages
         if (backendMessages.length < PAGE_SIZE) setHasEarlier(false);
@@ -196,14 +297,44 @@ export default function ChatScreen() {
           image: message.imageUrls && message.imageUrls.length > 0 ? message.imageUrls[0] : undefined,
         };
 
-        setMessages(previousMessages =>
-          GiftedChat.append(previousMessages, [formattedMessage])
-        );
+        setMessages(previousMessages => {
+          const updated = GiftedChat.append(previousMessages, [formattedMessage]);
+          // persist
+          saveMessagesToCache(conversationId || otherUserId, updated);
+          return updated;
+        });
 
         // Mark as read if message is from other user
         if (isSentByOther) {
           ApiService.markAsRead(message._id);
         }
+      }
+    };
+
+    // Listen for websocket connection events (reconnect/connected) to refresh stale cache
+    const handleConnectionEvent = (data) => {
+      try {
+        const status = data?.status;
+        if (status === 'connected' || status === 'reconnected') {
+          // If cache is stale for this conversation, refresh from server
+          (async () => {
+            try {
+              const convKey = conversationId || otherUserId;
+              if (!convKey) return;
+              const stale = await messageCache.isCacheStale(convKey, 5);
+              if (stale) {
+                console.log('🔁 Connection restored — refreshing stale conversation:', convKey);
+                await loadMessages({});
+              } else {
+                console.log('🟢 Connection restored — cache fresh, skipping refresh for', convKey);
+              }
+            } catch (err) {
+              console.warn('Error refreshing messages after reconnect', err);
+            }
+          })();
+        }
+      } catch (err) {
+        console.warn('handleConnectionEvent error', err);
       }
     };
 
@@ -228,14 +359,52 @@ export default function ChatScreen() {
     WebSocketService.addEventListener('message', handleNewMessage);
     WebSocketService.addEventListener('private-message', handleNewMessage);
     WebSocketService.addEventListener('typing', handleTyping);
+    WebSocketService.addEventListener('connection', handleConnectionEvent);
 
     // Cleanup
     return () => {
       WebSocketService.removeEventListener('message', handleNewMessage);
       WebSocketService.removeEventListener('private-message', handleNewMessage);
       WebSocketService.removeEventListener('typing', handleTyping);
+      WebSocketService.removeEventListener('connection', handleConnectionEvent);
     };
   }, [user, otherUserId, router, loadMessages]);
+
+  // Background refresh on app resume
+  useEffect(() => {
+    let prevState = AppState.currentState;
+
+    const handleAppStateChange = async (nextState) => {
+      try {
+        if (prevState.match(/inactive|background/) && nextState === 'active') {
+          const convKey = conversationId || otherUserId;
+          if (!convKey) return;
+          const stale = await messageCache.isCacheStale(convKey, 5);
+          if (stale) {
+            console.log('🔄 App resumed — refreshing stale conversation:', convKey);
+            await loadMessages({});
+          } else {
+            console.log('🟢 App resumed — cache fresh, skipping refresh for', convKey);
+          }
+        }
+      } catch (err) {
+        console.warn('AppState refresh error', err);
+      } finally {
+        prevState = nextState;
+      }
+    };
+
+    const sub = AppState.addEventListener ? AppState.addEventListener('change', handleAppStateChange) : AppState.addEventListener('change', handleAppStateChange);
+
+    return () => {
+      try {
+        if (sub && typeof sub.remove === 'function') sub.remove();
+        else AppState.removeEventListener('change', handleAppStateChange);
+      } catch (err) {
+        /* ignore */
+      }
+    };
+  }, [conversationId, otherUserId, loadMessages]);
 
   // Send message
   const onSend = useCallback(async (newMessages = []) => {
@@ -270,7 +439,7 @@ export default function ChatScreen() {
           user: {
             _id: user._id,
             name: user.name,
-            avatar: normalizeAvatar(user.profilePicture || ''),
+            avatar: resolveProfilePicture(user),
           },
           sent: true,
           received: false,
@@ -279,6 +448,22 @@ export default function ChatScreen() {
         setMessages(previousMessages =>
           GiftedChat.append(previousMessages, [formattedMessage])
         );
+
+        // persist image message
+        try {
+          const updatedCache = mergeMessagesDedup(messages || [], [formattedMessage]);
+          saveMessagesToCache(conversationId || otherUserId, updatedCache);
+        } catch (err) {
+          console.warn('Failed to persist image message', err);
+        }
+
+        // persist sent message
+        try {
+          const updatedCache = mergeMessagesDedup(messages || [], [formattedMessage]);
+          saveMessagesToCache(conversationId || otherUserId, updatedCache);
+        } catch (err) {
+          console.warn('Failed to persist sent message', err);
+        }
       } else {
         console.error('❌ Failed to send message:', response.error);
         Alert.alert('Error', 'Failed to send message');
@@ -372,7 +557,7 @@ export default function ChatScreen() {
       });
 
       // Send via API
-      const response = await fetch('https://rentify-server-ge0f.onrender.com/api/messages/send', {
+      const response = await fetch(`${BASE_API_URL}/api/messages/send`, {
         method: 'POST',
         body: formData,
         headers: {
@@ -402,15 +587,22 @@ export default function ChatScreen() {
           user: {
             _id: user._id,
             name: user.name || user.username,
-            avatar: user.profilePicture,
+            avatar: resolveProfilePicture(user),
           },
           sent: true,
           received: false,
         };
 
-        setMessages(previousMessages =>
-          GiftedChat.append(previousMessages, [formattedMessage])
-        );
+        setMessages(previousMessages => {
+          const updated = GiftedChat.append(previousMessages, [formattedMessage]);
+          // persist image message
+          try {
+            saveMessagesToCache(conversationId || otherUserId, mergeMessagesDedup(updated || [], []));
+          } catch (err) {
+            console.warn('Failed to persist image message', err);
+          }
+          return updated;
+        });
 
         // Send via WebSocket
         WebSocketService.sendMessage({
@@ -619,7 +811,7 @@ export default function ChatScreen() {
                 source={{ 
                   uri: (otherUserAvatar && otherUserAvatar.startsWith('http'))
                     ? otherUserAvatar
-                    : (otherUserAvatar ? `https://rentify-server-ge0f.onrender.com${otherUserAvatar}` : 'https://api.dicebear.com/7.x/avataaars/png?seed=default')
+                    : (otherUserAvatar ? `${BASE_API_URL}${otherUserAvatar}` : 'https://api.dicebear.com/7.x/avataaars/png?seed=default')
                 }}
                 style={styles.headerAvatar}
               />
@@ -649,6 +841,13 @@ export default function ChatScreen() {
         }}
       />
 
+      {isRefreshing && (
+        <View style={styles.refreshBanner}>
+          <ActivityIndicator size="small" color={COLORS.primary} />
+          <Text style={styles.refreshText}>Refreshing messages…</Text>
+        </View>
+      )}
+
       <GiftedChat
         messages={messages}
         onSend={messages => onSend(messages)}
@@ -656,7 +855,7 @@ export default function ChatScreen() {
         user={{
           _id: user._id,
           name: user.name || user.username,
-          avatar: normalizeAvatar(user.profilePicture || ''),
+          avatar: resolveProfilePicture(user),
         }}
         renderBubble={memoizedRenderBubble}
         renderInputToolbar={memoizedRenderInputToolbar}
@@ -812,5 +1011,24 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     marginLeft: 4,
     fontWeight: '600',
+  },
+  refreshBanner: {
+    position: 'absolute',
+    top: 60,
+    left: 0,
+    right: 0,
+    zIndex: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 6,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  refreshText: {
+    marginLeft: 8,
+    color: COLORS.dark,
+    fontSize: 13,
   },
 });
