@@ -6,8 +6,8 @@ import apiService from './apiService';
  * Handles user authentication and token management
  */
 
-const TOKEN_KEY = '@rentify_auth_token';
-const USER_KEY = '@rentify_user_data';
+const TOKEN_KEY = 'token';
+const USER_KEY = 'user';
 
 class AuthService {
   constructor() {
@@ -25,9 +25,13 @@ class AuthService {
 
       if (token && userData) {
         this.token = token;
-        this.currentUser = JSON.parse(userData);
+        try {
+          this.currentUser = JSON.parse(userData);
+        } catch (e) {
+          this.currentUser = null;
+        }
         apiService.setToken(token);
-        
+
         console.log('✅ Auth initialized with saved token');
         return { success: true, user: this.currentUser };
       }

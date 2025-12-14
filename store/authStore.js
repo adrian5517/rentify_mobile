@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { create } from "zustand";
 import normalizeAvatar from '../utils/normalizeAvatar';
+import apiService from '../services/apiService';
 
 // Utility to safely store values
 const safeSetItem = async (key, value) => {
@@ -97,7 +98,30 @@ export const useAuthStore = create((set) => ({
   checkAuth: async () => {
     try {
       const token = await AsyncStorage.getItem("token");
-      return !!token; // Return true if token exists, otherwise false
+      const userStr = await AsyncStorage.getItem("user");
+
+      if (token && userStr) {
+        try {
+          const parsed = JSON.parse(userStr);
+          const normalized = parsed
+            ? { ...parsed, profilePicture: normalizeAvatar(parsed.profilePicture || parsed.profile_picture || parsed.avatar || parsed) }
+            : null;
+
+          // Let apiService know about token so API requests include it
+          try { apiService.setToken(token); } catch (e) { /* ignore if service not ready */ }
+
+          set({ token, user: normalized, profilePicture: normalized?.profilePicture || null });
+          return true;
+        } catch (e) {
+          // If parsing fails, remove bad data
+          await AsyncStorage.removeItem('user');
+          await AsyncStorage.removeItem('token');
+          console.error('Error parsing stored user, cleared auth:', e);
+          return false;
+        }
+      }
+
+      return false;
     } catch (error) {
       console.error("Error checking authentication:", error);
       return false;

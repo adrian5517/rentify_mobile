@@ -6,7 +6,19 @@ import { useAuthStore } from '../store/authStore';
 import WebSocketService from '../services/websocketService';
 
 export default function RootLayout() {
-  const { user } = useAuthStore();
+  const { user, checkAuth } = useAuthStore();
+
+  useEffect(() => {
+    // Rehydrate auth state on app mount so persisted user/token are available
+    (async () => {
+      try {
+        const ok = await checkAuth();
+        if (ok) console.log('🔁 Auth rehydrated on app mount');
+      } catch (e) {
+        console.error('Error rehydrating auth on mount', e);
+      }
+    })();
+  }, [checkAuth]);
 
   useEffect(() => {
     // Initialize WebSocket connection when user is authenticated
